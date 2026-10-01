@@ -22,10 +22,8 @@ Nuitka 編譯核心；內含執行所需 Python runtime，不要求終端使用�
 
 ## 自動化
 
-將本包內容推入**私有** GitHub 儲存庫，執行 Actions → Build private-core installers → Run workflow。
-流程先測試來源，分別在 Windows/Linux 編譯，再安裝／執行模擬自測／解除安裝。
-下載兩個 artifacts，確認驗證結果與平台 smoke test，才把安裝檔及 checksum 放到公開產品儲存庫的 Release。
-不可把本 OWNER-PRIVATE ZIP、私有核心 commit、Nuitka build 目錄放入公開 repo。
+Publish the reviewed source to the public GitHub repository and run the build workflow. The resulting installers and checksums may be attached to a public Release after validation.
+Do not place personal data, credentials, private databases, or unrelated build output in the public repository.
 public/ 的文件可以更新至公開 repo；公開 repo 不含核心，因此 GitHub 自動生成的 source archive 也只含文件。
 Windows 安裝包目前沒有數位簽章；正式發布前應另行配置擁有者的簽署憑證。
 

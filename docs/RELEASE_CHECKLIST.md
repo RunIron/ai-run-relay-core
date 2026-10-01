@@ -15,4 +15,4 @@
 - [ ] 確認正式商業授權聯絡方式與權利人資料，並核對 LICENSE。
 
 - [ ] 完成 VERIFY_V013.md 的真瀏覽器與真 CLI 驗證。
-- [ ] 公開庫只放 PUBLIC-INTRO，完整 OWNER-PRIVATE 不公開。
+- [ ] Confirm that the public repository contains only intended source, documentation, tests, and release assets; never include personal data or credentials.

@@ -1,6 +1,6 @@
 # AI Run Relay
 
-**擁有者私有原始碼包：請勿將本資料夾直接上傳公開 GitHub。公開介紹請使用 `PUBLIC-INTRO` 封裝。**
+**This repository contains the public v0.1.4 source release. Use it only within the rights and limitations stated in [LICENSE](LICENSE).**
 
 **工作先排好，等待交給工具，額度恢復自動接續。**
 
@@ -98,9 +98,9 @@ python3 -m unittest discover -s tests -v
 
 **非商業用途可依 [LICENSE](LICENSE) 免費使用、修改與分享；商業用途須事先聯絡本專案發起人，取得另行書面授權。**
 
-商業用途包含企業內部營運、客戶服務、收費部署、SaaS 及商業產品整合。授權聯絡信箱：runiron.wu@gmail.com。本版沿用自訂非商業授權，不再標示 MIT／OSI 開源授權；本次完整原始碼只交付擁有者，並未公開發布。
+Commercial use includes enterprise operations, customer services, paid deployment, SaaS, and integration into commercial products. Contact: runiron.wu@gmail.com. This public source release is distributed under the accompanying non-commercial license; it is not MIT and is not represented as an OSI-approved open-source license.
 
-完整資料夾僅適合私有 GitHub repository；公開庫請用 `python3 tools/package_release.py` 產生的 PUBLIC-INTRO 包，不含核心。詳見 [核心保護](docs/CORE_PROTECTION.md)。發布前先看 [RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)，並完成自己的 Codex 月租端對端測試。第一版為獨立實作，未複製 unsnooze 程式碼。
+The complete source tree is intentionally published in this repository for non-commercial use. Review [CORE_PROTECTION.md](docs/CORE_PROTECTION.md) and [RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) before producing derivatives or releases. Complete your own end-to-end testing with your Codex subscription before relying on the software. This is an independent implementation and does not copy unsnooze code.
 
 延伸方向：Gemini／Claude 官方工具接頭、工作依賴、驗收規則、桌面打包、常駐服務。跨平台是架構方向，並非目前已支援所有 AI 月租產品。
 

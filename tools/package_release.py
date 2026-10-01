@@ -41,7 +41,7 @@ def main():
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     version = (ROOT / "relay" / "__init__.py").read_text().split('__version__ = "')[1].split('"')[0]
-    owner = args.out / f"AI-Run-Relay-v{version}-OWNER-PRIVATE.zip"
+    owner = args.out / f"AI-Run-Relay-v{version}-SOURCE.zip"
     public = args.out / f"AI-Run-Relay-v{version}-PUBLIC-INTRO.zip"
     owner_package(owner)
     public_package(public)
