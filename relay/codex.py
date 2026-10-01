@@ -372,4 +372,7 @@ class CodexAdapter:
                         proc.wait()
                 for stream in (proc.stdin, proc.stdout):
                     if stream:
-                        stream.close()
+                        try:
+                            stream.close()
+                        except OSError:
+                            pass
