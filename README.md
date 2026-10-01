@@ -1,6 +1,6 @@
 # AI Run Relay
 
-**This repository contains the public v0.1.4 source release. Use it only within the rights and limitations stated in [LICENSE](LICENSE).**
+**This repository contains the public v0.1.5 source release. Use it only within the rights and limitations stated in [LICENSE](LICENSE).**
 
 **工作先排好，等待交給工具，額度恢復自動接續。**
 
@@ -8,7 +8,7 @@
 
 AI Run Relay 是本機執行的 AI 工作佇列。它保存每個完成步驟的結果，遇到額度限制便等待，再接續原本的工作階段。中文控制台可新增工作、查看倒數、檢視成果、取消與匯出。
 
-**v0.1.4 / 安裝版測試候選。** 排程與 Codex 通訊流程有自動測試；尚未使用真實月租帳號驗證。第一版接入 **Codex 官方 app-server** 與不消耗額度的模擬模式。Claude、Gemini 接頭尚未實作。Codex 第一版只提供唯讀分析與文字成果，不開放自主寫檔、發信或發布。
+**v0.1.5 / 安裝版測試候選。** 排程與 Codex 通訊流程有自動測試；尚未使用真實月租帳號驗證。第一版接入 **Codex 官方 app-server** 與不消耗額度的模擬模式。Claude、Gemini 接頭尚未實作。Codex 第一版只提供唯讀分析與文字成果，不開放自主寫檔、發信或發布。
 
 ## 一般使用者安裝版
 

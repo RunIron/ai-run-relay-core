@@ -2,6 +2,7 @@
 import http.client
 import json
 import sqlite3
+import os
 import tempfile
 import threading
 import time
@@ -163,13 +164,13 @@ class V013Tests(unittest.TestCase):
         fake_home.mkdir()
         with patch('relay.server.Path.home', return_value=fake_home), patch('os.getcwd', side_effect=AssertionError('must not use cwd')):
             default = resolve_workspace(self.store)
-        self.assertEqual(default, fake_home / 'AI-Run-Relay-workspace')
+        self.assertEqual(default, (fake_home / 'AI-Run-Relay-workspace').resolve())
         self.assertTrue(default.is_dir())
         chosen = self.root / 'chosen'
         with patch('relay.server.Path.home', return_value=self.root / 'other-home'):
             self.assertEqual(resolve_workspace(self.store), default)
-            self.assertEqual(resolve_workspace(self.store, chosen), chosen)
-            self.assertEqual(resolve_workspace(self.store), chosen)
+            self.assertEqual(resolve_workspace(self.store, chosen), chosen.resolve())
+            self.assertEqual(resolve_workspace(self.store), chosen.resolve())
 
     def test_workspace_http_auth_validation_and_pinned_jobs(self):
         old = self.add('existing')
@@ -182,17 +183,18 @@ class V013Tests(unittest.TestCase):
         for headers in ({}, {**token, 'Origin': 'https://foreign.example'}):
             status, _, _ = self.request('/api/workspace', {'path': str(target)}, headers)
             self.assertEqual(status, 403)
-        self.assertEqual(self.engine.workspace, self.root / 'work')
+        self.assertEqual(self.engine.workspace, (self.root / 'work').resolve())
         for value in ('relative', str(target / 'missing'), '', 42):
             self.assertEqual(self.request('/api/workspace', {'path': value}, token)[0], 400)
         status, result, _ = self.request('/api/workspace', {'path': str(target)}, token)
         self.assertEqual(status, 200)
-        self.assertEqual(result['workspace'], str(target))
-        self.assertEqual(self.store.setting('workspace'), str(target))
+        normalized_target = target.resolve()
+        self.assertEqual(result['workspace'], str(normalized_target))
+        self.assertEqual(self.store.setting('workspace'), str(normalized_target))
         self.assertEqual(self.store.get(old['id'])['cwd'], old['cwd'])
         self.assertEqual(self.store.get(old['id'])['workspace_root'], old['workspace_root'])
-        self.assertEqual(self.add('new')['cwd'], str(target))
-        self.assertEqual(self.add('nested', cwd='nested')['cwd'], str(nested))
+        self.assertEqual(self.add('new')['cwd'], str(target.resolve()))
+        self.assertEqual(self.add('nested', cwd='nested')['cwd'], str(nested.resolve()))
         with self.assertRaises(ValueError):
             self.add('escape', cwd='../work')
 

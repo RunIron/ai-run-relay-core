@@ -70,10 +70,12 @@ class CodexTest(unittest.TestCase):
             binary = Path(tmp) / 'fake-codex'
             binary.write_text(SERVER.replace('MODE', repr(mode)))
             binary.chmod(0o700)
+            rpc_log = Path(tmp) / 'rpc.log'
+            rpc_log.touch()
             sessions = []
             result = CodexAdapter(str(binary), timeout=timeout).run(
                 {'id': 'job1', 'cwd': tmp, 'session_id': session, 'outputs': ['saved checkpoint']}, 'Analyze text', sessions.append, stop or threading.Event())
-            self.rpc = [__import__('json').loads(line) for line in (Path(tmp) / 'rpc.log').read_text().splitlines()]
+            self.rpc = [__import__('json').loads(line) for line in rpc_log.read_text().splitlines()]
             self.interrupted = (Path(tmp) / 'interrupted').exists()
             return result, sessions
 

@@ -1,12 +1,15 @@
-name: Build private-core installers
+name: Build AI Run Relay installers
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   source-tests:
-    if: github.event.repository.private == true
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
