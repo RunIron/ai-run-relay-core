@@ -13,7 +13,10 @@ from pathlib import Path
 class InstanceLock:
     """OS-held lock; released by the OS after a crash (not a stale PID file)."""
     def __init__(self, path):
-        self.file = open(path, "a+b")
+        try:
+            self.file = open(path, "a+b")
+        except PermissionError:
+            raise RuntimeError("這個資料目錄已由另一個 AI Run Relay 使用。") from None
         self.file.seek(0)
         if self.file.read(1) == b"":
             self.file.write(b"0")

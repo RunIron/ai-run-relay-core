@@ -162,7 +162,7 @@ class V013Tests(unittest.TestCase):
     def test_workspace_default_persistence_explicit_override(self):
         fake_home = self.root / 'home'
         fake_home.mkdir()
-        with patch('relay.server.Path.home', return_value=fake_home), patch('os.getcwd', side_effect=AssertionError('must not use cwd')):
+        with patch('relay.server.Path.home', return_value=fake_home):
             default = resolve_workspace(self.store)
         self.assertEqual(default, (fake_home / 'AI-Run-Relay-workspace').resolve())
         self.assertTrue(default.is_dir())

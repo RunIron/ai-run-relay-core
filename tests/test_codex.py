@@ -67,7 +67,7 @@ for line in sys.stdin:
 class CodexTest(unittest.TestCase):
     def run_fake(self, mode, session=None, stop=None, timeout=5):
         with tempfile.TemporaryDirectory() as tmp:
-            binary = Path(tmp) / 'fake-codex'
+            binary = Path(tmp) / 'fake-codex.py'
             binary.write_text(SERVER.replace('MODE', repr(mode)))
             binary.chmod(0o700)
             rpc_log = Path(tmp) / 'rpc.log'

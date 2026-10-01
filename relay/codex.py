@@ -10,6 +10,7 @@ import queue
 import shutil
 import signal
 import subprocess
+import sys
 import threading
 import time
 from typing import Callable
@@ -254,7 +255,10 @@ class CodexAdapter:
             env = dict(os.environ)
             for key in ('OPENAI_API_KEY', 'CODEX_API_KEY', 'OPENAI_BASE_URL'):
                 env.pop(key, None)
-            proc = subprocess.Popen([executable, '-c', 'forced_login_method="chatgpt"', '-c', 'model_provider="openai"', '-c', 'features.apps=false', 'app-server'],
+            command = [executable, '-c', 'forced_login_method="chatgpt"', '-c', 'model_provider="openai"', '-c', 'features.apps=false', 'app-server']
+            if str(executable).lower().endswith('.py'):
+                command = [sys.executable, executable, *command[1:]]
+            proc = subprocess.Popen(command,
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                 text=True, encoding='utf-8', errors='replace', env=env, cwd=job['cwd'],
                 start_new_session=(os.name == 'posix'))
