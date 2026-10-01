@@ -61,7 +61,7 @@ class RegressionTests(unittest.TestCase):
         return Engine(self.store, self.root / 'w', {'codex': adapter or FakeAdapter()}, lambda: self.now)
 
     def fake(self, mode):
-        path = self.root / f'fake-{mode}'
+        path = self.root / f'fake-{mode}.py'
         path.write_text(EARLY.replace('MODE', repr(mode)))
         path.chmod(0o700)
         return CodexAdapter(str(path), timeout=5).run(
