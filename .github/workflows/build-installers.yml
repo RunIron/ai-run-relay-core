@@ -1,0 +1,62 @@
+name: Build private-core installers
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-tests:
+    if: github.event.repository.private == true
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -v
+  build:
+    needs: source-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y patchelf xvfb
+      - name: Install compiler dependencies
+        run: python -m pip install -r packaging/build-requirements.txt
+      - name: Build compiled runtime and native installer
+        run: python tools/build_native.py
+      - name: Verify installed Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = (Get-ChildItem release-native/*-setup.exe).FullName
+          $target = Join-Path $env:RUNNER_TEMP 'Relay Installed'
+          $process = Start-Process $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$target`"") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'Installer failed' }
+          $report = Join-Path $env:RUNNER_TEMP 'installed-smoke.json'
+          $process = Start-Process "$target/AI-Run-Relay.exe" -ArgumentList @('--self-test', "`"$report`"") -Wait -PassThru
+          if ($process.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'Installed smoke failed' }
+          if (!(Get-Content $report | ConvertFrom-Json).ok) { throw 'Runtime smoke failed' }
+          $process = Start-Process "$target/unins000.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'Uninstaller failed' }
+      - name: Verify installed Linux package
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y ./release-native/*.deb
+          ai-run-relay --self-test "$RUNNER_TEMP/installed-smoke.json"
+          python -c "import json,os; assert json.load(open(os.environ['RUNNER_TEMP']+'/installed-smoke.json'))['ok']"
+          sudo apt-get remove -y ai-run-relay
+      - name: Save installers only, never source or build directories
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-run-relay-${{ runner.os }}-installers
+          path: release-native/*
+          if-no-files-found: error
+          retention-days: 14

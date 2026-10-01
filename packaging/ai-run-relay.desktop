@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=AI Run Relay
+Comment=Queue AI tasks and resume after quota resets
+Exec=ai-run-relay
+Terminal=false
+Categories=Utility;
+StartupNotify=true

@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+*.sqlite3*
+*.lock
+.env*
+.ai-run-relay/
+test-results/
+
+node_modules/
+release/
+
+release-native/
