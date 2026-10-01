@@ -106,12 +106,14 @@ class CodexAdapter:
         self.interrupt_timeout = interrupt_timeout
 
     def available(self) -> bool:
-        return shutil.which(self.executable) is not None
+        candidate = os.fspath(self.executable)
+        return (candidate.lower().endswith('.py') and Path(candidate).is_file()) or shutil.which(candidate) is not None
 
     def run(self, job: dict, prompt: str, on_session: Callable[[str], None], stop: threading.Event) -> Result:
         if stop.is_set():
             return Result('cancelled')
-        executable = shutil.which(self.executable)
+        candidate = os.fspath(self.executable)
+        executable = candidate if candidate.lower().endswith('.py') and Path(candidate).is_file() else shutil.which(candidate)
         if executable is None:
             return Result('review', error='找不到 Codex CLI；請先安裝並以 ChatGPT 帳號執行 codex login。')
         proc = None

@@ -17,11 +17,15 @@ class InstanceLock:
             self.file = open(path, "a+b")
         except PermissionError:
             raise RuntimeError("這個資料目錄已由另一個 AI Run Relay 使用。") from None
-        self.file.seek(0)
-        if self.file.read(1) == b"":
-            self.file.write(b"0")
-            self.file.flush()
-        self.file.seek(0)
+        try:
+            self.file.seek(0)
+            if self.file.read(1) == b"":
+                self.file.write(b"0")
+                self.file.flush()
+            self.file.seek(0)
+        except PermissionError:
+            self.file.close()
+            raise RuntimeError("這個資料目錄已由另一個 AI Run Relay 使用。") from None
         try:
             if os.name == "nt":
                 import msvcrt
