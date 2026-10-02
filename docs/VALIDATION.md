@@ -1,36 +1,65 @@
-# 本次驗證紀錄
+# Validation
 
-版本：0.1.0。環境：Linux、Python 3.12。
+This file records what has and has not been verified, and how to run the remaining checks. It replaces the per-version reports `VALIDATION_V014.md` and `VERIFY_V013.md`; their history is summarized below.
 
-## 已完成
+## v0.1.6 (2026-10-02)
 
-- 19 項 unittest 通過：10 項 Codex 假伺服器協定測試、7 項持久化排程測試、2 項 HTTP 安全與控制測試。
-- 五小時等待使用注入時鐘驗證，無需消耗 AI 額度或實際等待五小時。
-- 真實本機 HTTP 服務整合：建立三步模擬工作，觀察等待狀態、恢復、三份成果保存、JSON 匯出與全域暫停。
-- 前端 JavaScript 語法檢查及倒數時間字串回歸檢查。
-- Python wheel 成功打包；原始碼亦可直接用 `python3 -m relay` 執行。
+Status: test candidate, not yet published.
 
-## 未完成
+- All user-facing text (dashboard, desktop launcher, server and job messages, Codex prompts, CLI help, documentation) is English. A unit test fails if Chinese characters reappear in shipped code or docs.
+- Dashboard JavaScript was checked in Chromium against a mocked API: no script errors; jobs in waiting, needs-review and completed states render in English; countdowns, quota and activity log render; the connection banner clears after recovery.
+- Windows review run: 50 unit tests, 48 passed, 2 environment errors (no symlink privilege; test Python without Tcl resources). Both tests now skip in those environments. The same review found that a shared late platform reset only extended the deadline of the job that received it; this is fixed and covered by a regression test.
+- Browser smoke test (`node tests/browser_smoke.cjs`) not run yet: Chromium was not available.
+- Installers: the existing setup file is v0.1.5 and does not represent this source. v0.1.6 installers must be rebuilt and smoke-tested (GitHub Actions workflow) before release.
+- **Not verified with a real account:** Codex sign-in, two-step resume, cancel confirmation and quota reset. Release v0.1.6 as a pre-release until the manual checks below pass.
 
-- 真實 Codex CLI 與 ChatGPT 月租帳號端對端驗證：環境無 Codex CLI，未使用使用者憑證。
-- 瀏覽器視覺與點擊測試：環境無 Chromium，安裝下載未取得有效瀏覽器封裝，因此未聲稱通過。
-- Windows / macOS 實機測試。假伺服器測試使用 POSIX 可執行腳本，Windows 請在 WSL 跑測試；產品啟動腳本尚需 Windows 實測。
+Data from earlier versions: job events and error text already stored in an existing database stay in the language they were written in. New messages are English.
 
-本版應以原型試用，不宜宣称所有平台已支援、配額即時監控或無限使用。
+## Earlier versions
 
-## 0.1.1 授權更新
+- **v0.1.4:** 42 unit tests passed. Linux x86_64 build (Nuitka 4.2.2, Python 3.12, Ubuntu 24.04) produced `.deb` and `.tar.gz` packages requiring glibc >= 2.39. The compiled self-test passed, including after unpacking the `.deb` and running with no external Python. The Windows installer, desktop GUI, apt installation and real Codex were not tested.
+- **v0.1.3:** 40 unit tests passed. 200 jobs with 16 KiB output each produced a 37,097-byte summary response (about 4 ms, informational only). Changes: summary projection with paging and revisions, keyed DOM cards, default workspace outside the program folder, graceful interrupt, one-time recovery for missing sessions, final-answer filtering, and codex-bucket quota selection.
+- **v0.1.0:** 19 unit tests passed; a five-hour wait was verified with an injected clock.
 
-更新 LICENSE、README、控制台註記與套件授權資訊；排程功能未變更。先前 0.1.0 的測試紀錄保留。
+## Automated tests
 
-## v0.1.3 本次驗證（2026-10-01）
+```bash
+python3 -m unittest discover -s tests -v
+```
 
-- 40 項 unittest 通過；保留原上傳版回歸測試。
-- 200 筆工作各含 16 KiB 成果，摘要 HTTP 回應 37,097 bytes，該次測量約 4.26 ms（只供參考，不作性能保證）。
-- 本機 HTTP 完整模擬：新增工作 → 等待額度 → 接續 → 三步成果保存；列表沒有完整輸出，詳情 API 可取回成果；無變動 revision 回傳空 jobs。
-- 前端 JavaScript 及瀏覽器測試腳本語法通過。
-- 真瀏覽器測試嘗試啟動後因缺少 Chromium executable 失敗，未能驗證 DOM／文字選取／捲動保留；已附可在開發機執行的測試腳本。
-- 本環境無 Codex CLI，未完成真實登入、interrupt 與額度重置驗證。
-- 公開封裝允許清單测试通過；不含核心程式。完整原始碼只供擁有者私下保管，未做編譯或加密。
-- GitHub 尚未上傳，未改動任何遠端儲存庫可見性。
+On Windows PowerShell, use `py -3` instead of `python3`.
 
-請依 VERIFY_V013.md 執行剩餘驗收。
+The browser test uses intercepted HTTP with fake data; it calls no AI and changes no account:
+
+```bash
+npm install --no-save --package-lock=false playwright
+npx playwright install chromium
+node tests/browser_smoke.cjs
+```
+
+It checks that outputs are not loaded until expanded, that DOM nodes, text selection and output scroll position survive three polls, that a new row on another page is filled in, and that a 390 px phone width has no horizontal overflow.
+
+## Real Codex subscription checks (run on your own computer)
+
+1. Record `codex --version`, the operating system and the Relay version. Use your own official ChatGPT sign-in and never give tokens to anyone.
+2. Create a separate test folder with a `sample.txt` containing non-sensitive notes, and select that folder in the dashboard.
+3. Add a two-step read-only job: "Read sample.txt and list three key points", then "Write a short summary based on the previous step". Confirm the content is not the Relay source code, both results are saved, and no intermediate commentary is included.
+4. Start a longer read-only job and cancel it. Check the activity log for "Session stop confirmed". This is different from the interrupt RPC merely succeeding. If it times out, confirm that the log says the stop was not confirmed, and do not claim a clean stop.
+5. To test timeouts, use `CodexAdapter(timeout=<short seconds>)` in a test script with a separate data folder; do not change your main jobs.
+6. Session expiry is mainly covered by the fake CLI tests; do not delete important real sessions. If you naturally hit an expired session, confirm the new ID, the recovery event, and that the original results are still present. Other errors should still pause the job.
+7. When real quota runs out, compare the official display with Relay's bucket and reset time, and watch it resume after the next reset. Do not burn quota on purpose. Without enough evidence, keep the status "not yet verified with a real account".
+8. On Windows, run a Codex job from the installed app and confirm no console window appears.
+
+## Upgrading
+
+Stop the old version and back up `~/.ai-run-relay/` (or your `--data-dir`) before starting the new one. SQLite adds summary and revision columns automatically; the migration test confirms outputs and original ordering are preserved. To roll back, restore the backup; never run old and new versions against the same data folder at the same time.
+
+The `ui_language` setting from v0.1.5 is no longer used and is ignored.
+
+## Performance figures
+
+Tests print the HTTP response size and time for information only; there is no flaky millisecond threshold. Summaries are limited to 100 per page (default 50), events to 100. A full export and single-job details can still be large; they are read only when the user asks.
+
+## Official reference
+
+- https://learn.chatgpt.com/docs/app-server (turn/interrupt, agentMessage phase, rateLimitsByLimitId)

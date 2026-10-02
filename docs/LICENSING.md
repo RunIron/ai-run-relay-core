@@ -1,11 +1,11 @@
-# 授權版本說明
+# License History
 
-0.1.1 起隨附本條款的版本改採非商業用途授權，商業用途須取得另行書面授權。原 0.1.0 封裝曾附 MIT 授權，本次變更不追溯變更已合法授予的權利；請勿把新版條款描述為已撤銷先前授權。
+Starting with 0.1.1, versions that include the current terms use a non-commercial license; commercial use requires a separate written license. The original 0.1.0 package shipped with the MIT License. This change does not retroactively alter rights already lawfully granted, so do not describe the new terms as revoking the earlier license.
 
-MIT 原本允許商用，因此不能在維持 MIT 的同時附加商用禁止。限制商用的版本以「原始碼公開（source-available）」描述，不稱為 OSI 開源授權。
+MIT permits commercial use, so a commercial-use prohibition cannot be added while keeping MIT. The restricted versions are described as "source-available", not as an OSI-approved open-source license.
 
-授權文件是本專案的自訂條款草案，正式對外商業授權前宜由熟悉相關法域的律師確認權利歸屬與適用條款。正式聯絡信箱待專案發起人確認，未擅自補全電子郵件地址。
+The license is a custom draft for this project. Before granting formal commercial licenses, have a lawyer familiar with the relevant jurisdiction confirm rights ownership and the applicable terms.
 
-參考：
+References:
 - https://choosealicense.com/licenses/mit/
 - https://opensource.org/osd

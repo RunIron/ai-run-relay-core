@@ -1,48 +1,53 @@
-# 架構與限制
+# Architecture and Limits
 
-## 模組
+## Modules
 
-- `relay/core.py`：SQLite 工作佇列、狀態轉移、共用平台等待、檢查點、程序鎖。
-- `relay/codex.py`：以官方 `codex app-server` 子程序及 JSON-RPC 執行；不直接呼叫私人 HTTP 端點。
-- `relay/server.py`：本機 HTTP 服務，使用每次啟動隨機 CSRF token。
-- `relay/static/index.html`：無 CDN 或前端框架的中文控制台。
+- `relay/core.py`: SQLite job queue, state transitions, shared platform waiting, checkpoints, process lock.
+- `relay/codex.py`: runs the official `codex app-server` as a subprocess over JSON-RPC; never calls private HTTP endpoints directly.
+- `relay/server.py`: local HTTP service with a random CSRF token generated on every start.
+- `relay/desktop.py`: Tk launcher window for the installed app; hosts the same local service on a free port.
+- `relay/static/index.html`: English dashboard with no CDN or front-end framework.
 
-## 狀態
+## States
 
 `queued → running → queued / succeeded`
 
-額度不足：`running → waiting_quota → running`。
+Quota unavailable: `running → waiting_quota → running`.
 
-未確認的中斷：`running → needs_review`。檢查後由使用者確認回到 `queued`。失敗也需要確認才重試。取消為終止狀態。
+Unconfirmed interruption: `running → needs_review`. After checking, the user confirms and the job returns to `queued`. A failure also needs confirmation before it is retried. Cancellation is a final state.
 
-## 檢查點與續跑
+## Checkpoints and resuming
 
-每個成功步驟在同一 SQLite transaction 內保存結果與新的 step_index。先保存官方 thread ID，再執行 turn；恢復時以此 ID 接續，既有 thread 沿用上下文，避免每步重送全部成果。明確失效時只新建一次 thread，附上已保存成果；登入或一般 RPC 錯誤不自動新建。
+Each successful step saves its result and the new `step_index` in a single SQLite transaction. The official thread ID is saved before the turn runs; resuming continues with that ID, so the existing thread keeps its context and earlier results are not re-sent each step. Only when the thread is explicitly missing or expired is a new thread created, once, with the saved results attached. Sign-in errors and general RPC errors never create a new thread automatically.
 
-如果 AI 已完成但 Relay 尚未保存就中斷，不能宣稱 exactly-once。重啟時真實工作轉為 needs_review；請先查官方工作階段與外部結果。模型生成的中途輸出不能當作成功檢查點。
+If the AI finished but Relay stopped before saving, exactly-once cannot be claimed. On restart, real jobs become `needs_review`; check the official session and any external results first. Intermediate model output is never treated as a successful checkpoint.
 
-## 配額
+The worker loop catches unexpected errors from a scheduling pass and keeps running, so one bad pass cannot silently stop the queue.
 
-run 前讀取 `account/rateLimits/read`；控制台數值為最近一次工作查詢的快照，不是持續即時監控。預設只選 codex bucket，不以無關 bucket 的 100% 阻塞執行。未知對應不猜測，若實際請求仍受限才做有限退避。未知資料顯示未知。官方用量窗口與恢復時間優先；缺失時採有限退避。第一版一個 Relay 程序對應一個本機 Codex 登入，無帳號池。
+## Quota
 
-## 權限與整合
+`account/rateLimits/read` is read before each run. The dashboard shows a snapshot from the most recent job query, not continuous live monitoring. By default only the `codex` bucket is used; a 100% unrelated bucket does not block execution. Unknown mappings are not guessed; limited backoff is used only if the real request is still rate-limited. Unknown data is shown as unknown. Official usage windows and reset times take priority; when they are missing, limited backoff is used. One Relay process maps to one local Codex sign-in; there is no account pool.
 
-第一版只開放唯讀工作，禁止額外權限核准。檔案系統唯讀不代表外部工具沒有副作用：請使用不含私人外部 MCP、plugins、hooks、notify 的 Codex 設定。接頭透過官方 config/read 與 configRequirements/read 檢查設定，發現啟用的這些整合或 hooks.json 檔案時會暫停，亦在子程序停用 Apps。這不會修改使用者的設定檔。接頭會對無法自動處理的權限／互動要求暫停，不會代答。
+## Permissions and integrations
 
-thread sandbox 使用官方 schema 的 `read-only`，turn policy 使用 `readOnly` 且 `networkAccess:false`。這是官方協定中的兩種不同列舉拼法。尚未完成真實 CLI 端對端測試；不相容或不能檢查設定的 CLI 會停在人工確認。
+Only read-only jobs are allowed, and additional permission approvals are refused. A read-only file system does not mean external tools have no side effects, so use a Codex configuration without private external MCP servers, plugins, hooks or notify. The provider checks settings through the official `config/read` and `configRequirements/read` methods, pauses if any of these integrations or a `hooks.json` file is enabled, and disables Apps in the subprocess. It never modifies the user's configuration files. Permission or interaction requests that cannot be handled automatically pause the job; Relay never answers them on the user's behalf.
 
-工作目錄限制不是完整機密隔離；官方沙箱的讀取範圍由 Codex 實作決定。不要指派本身需要更高權限的任務並期待工具繞過限制。
+The thread sandbox uses `read-only` from the official schema; the turn policy uses `readOnly` with `networkAccess: false`. These are two different enum spellings in the official protocol. Real CLI end-to-end testing is not complete; an incompatible CLI, or one whose settings cannot be checked, stops at manual review.
 
-## 目前邊界
+On Windows the subprocess and its cleanup (`taskkill`) start with `CREATE_NO_WINDOW`, so the installed app does not flash console windows.
 
-只有 Codex 與 mock 接頭；尚無跨主機排程、任務相依圖、費用估算、token 預算、OS 常駐服務安裝、郵件／手機推播。瀏覽器通知需自行開啟且頁面保持開啟。只有內建全域與平台串行執行；不是分散式佇列。
+The working-folder restriction is not complete confidentiality isolation; the read scope of the official sandbox is decided by Codex. Do not assign tasks that need higher privileges and expect Relay to bypass the limits.
 
-第一版有 15 分鐘每次執行 timeout、6 次單步自動嘗試、預設 7 天等待期限；平台明示更晚重置時延長至重置後一小時。資料庫不會自動刪除歷史產出；長期使用請備份與管理容量。
+## Current boundaries
 
-## 摘要與詳情 API
+Only the Codex and mock providers exist. There is no cross-host scheduling, job dependency graph, cost estimate, token budget, OS background-service install, or email/mobile push. Browser notifications must be enabled manually and need the page to stay open. Execution is serial, globally and per platform; this is not a distributed queue.
 
-`GET /api/state?page=0&page_size=50&since=revision` 回傳摘要變更、該頁 job_order、總數與狀態統計。初次或換頁不帶 since。若 job_order 出現本機未快取且沒有摘要的 ID（新增資料使頁面成員改變），再補抓該頁一次不帶 since 的快照。`GET /api/jobs/{id}` 才取得完整步驟與成果。
+Limits: a 15-minute timeout per run, 6 automatic attempts per step, and a default 7-day waiting limit, extended to one hour after the reset when the platform explicitly reports a later reset. The database never deletes historical outputs automatically; back it up and manage its size for long-term use.
 
-SQLite 保存 summary/status/revision 投影，輪詢與排程掃描不解析所有已完成工作的 outputs。前端保留 keyed DOM 卡片及成果 pre 節點；只有文字真的變動才修改 textContent。
+## Summary and detail API
 
-`POST /api/workspace` 需相同 CSRF 驗證；切換預設目錄只影響新工作。全量匯出仍使用 `/api/export`，由使用者主動執行。
+`GET /api/state?page=0&page_size=50&since=revision` returns changed summaries, the page's `job_order`, totals and status counts. The first request and page changes omit `since`. If `job_order` contains an ID that the client has neither cached nor received a summary for (new data shifted page membership), the client fetches that page once more without `since`. Only `GET /api/jobs/{id}` returns full steps and results.
+
+SQLite stores a summary/status/revision projection, so polling and scheduling scans never parse the outputs of all completed jobs. The front end keeps keyed DOM cards and output `pre` nodes, and only changes `textContent` when the text actually changed.
+
+`POST /api/workspace` requires the same CSRF check; changing the default folder only affects new jobs. `POST /api/preferences` accepts `{"admin_tools_open": bool}`. POST routes match on the URL path, ignoring any query string. A full export still uses `/api/export` and runs only when the user requests it.

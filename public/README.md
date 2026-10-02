@@ -1,19 +1,19 @@
 # AI Run Relay
 
-工作先排好，等待交給工具，額度恢復後自動接續。
+Queue your work, let the tool handle the waiting, and resume automatically when quota returns.
 
-核心原始碼保留於私有儲存庫。一般使用者使用編譯後的安裝包，不需要取得核心原始碼或安裝 Python。
+The complete source is published for non-commercial use under the accompanying LICENSE. Regular users can install the compiled package without Python.
 
-## 安裝包
+## Packages
 
-- Windows x64：`AI-Run-Relay-0.1.4-windows-x64-setup.exe`（須完成 Windows 建置與驗證才會提供）。
-- Linux x86_64：`.deb` 與 `.tar.gz`，本次包要求 glibc >= 2.39，以 Ubuntu 24.04 為測試環境；桌面及真實 Codex 尚待實機驗證。
-- `PUBLIC-INTRO.zip` 只有介紹與說明，**不是可執行程式**。沒有安裝檔附件的發行頁不代表安裝版已上線。
+- Windows x64: `AI-Run-Relay-0.1.6-windows-x64-setup.exe` (provided only after the Windows build and validation pass).
+- Linux x86_64: `.deb` and `.tar.gz`. The glibc floor depends on the build host (a package built on Ubuntu 24.04 requires glibc >= 2.39). Desktop use and real Codex still need hands-on verification.
+- `PUBLIC-INTRO.zip` contains documentation only and **is not a runnable program**. A release page without installer attachments does not mean the installer is available.
 
-安裝及首次使用請見 [INSTALL.md](INSTALL.md)。
-目前是測試原型，僅 Mock 與 Codex 接頭；不提供無限額度。
+For installation and first use, see [INSTALL.md](INSTALL.md).
+This is a test prototype with only the simulation and Codex providers. It does not provide unlimited quota.
 
-## 商業授權
+## Commercial licensing
 
-商業用途須事先取得書面授權，聯絡：runiron.wu@gmail.com。
-實際使用權以安裝包隨附的 LICENSE 為準。公開文件不代表核心原始碼已公開。
+Commercial use requires prior written authorization. Contact: runiron.wu@gmail.com.
+The LICENSE included with the package governs actual usage rights.

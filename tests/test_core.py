@@ -132,6 +132,31 @@ class CoreTests(unittest.TestCase):
         self.assertFalse(self.engine.tick())
         self.assertEqual(len(self.adapter.calls), 6)
 
+    def test_restart_requeues_mock_without_stale_error(self):
+        job = self.engine.add({'title': 'mock', 'steps': ['one']})
+        job.update(status='running')
+        self.store.save(job)
+        Engine(self.store, self.workspace, {}, lambda: self.now)
+        recovered = self.store.get(job['id'])
+        self.assertEqual((recovered['status'], recovered['last_error']), ('queued', ''))
+
+    def test_worker_survives_a_failing_tick(self):
+        class NoSleep(threading.Event):
+            def wait(self, timeout=None):
+                return self.is_set()
+        calls = []
+        def flaky():
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError('transient')
+            self.engine.shutdown.set()
+            return False
+        self.engine.shutdown = NoSleep()
+        self.engine.tick = flaky
+        self.engine.start()
+        self.engine.thread.join(2)
+        self.assertEqual(len(calls), 2)
+
     def test_invalid_inputs_and_workspace_escape(self):
         for values in ({'title': ''}, {'steps': []}, {'priority': True}, {'priority': 11},
                        {'wait_seconds': 0}, {'provider': 'unknown'}, {'cwd': str(self.root)},
@@ -139,7 +164,10 @@ class CoreTests(unittest.TestCase):
             with self.subTest(values=values), self.assertRaises(ValueError):
                 self.engine.add(dict({'title': 't', 'steps': ['s']}, **values))
         outside = self.workspace / 'escape'
-        outside.symlink_to(self.root, target_is_directory=True)
+        try:
+            outside.symlink_to(self.root, target_is_directory=True)
+        except OSError:
+            self.skipTest('creating symbolic links needs Developer Mode or admin rights on Windows')
         with self.assertRaises(ValueError):
             self.engine.add({'title': 't', 'steps': ['s'], 'cwd': 'escape'})
 

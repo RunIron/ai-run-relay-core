@@ -33,8 +33,8 @@ class LocalService:
         return f'http://127.0.0.1:{self.server.server_port}'
 
     def demo(self):
-        return self.engine.add({'title': '第一次使用：等待後自動接續', 'provider': 'mock',
-                               'steps': ['整理資料', '等待額度恢復', '完成摘要'], 'wait_seconds': 8})
+        return self.engine.add({'title': 'Relay demo: resume after waiting', 'provider': 'mock',
+                                       'steps': ['Organize materials', 'Wait for quota', 'Complete summary'], 'wait_seconds': 8})
 
     def close(self):
         if self.server:
@@ -64,21 +64,21 @@ def main():
     try:
         root = tk.Tk()
     except tk.TclError:
-        raise SystemExit('沒有可用的桌面環境。請使用 ai-run-relay --server；遠端存取請用 SSH 本機轉送。')
+        raise SystemExit('No desktop environment is available. Run ai-run-relay --server; use SSH port forwarding for remote access.')
     root.title(f'AI Run Relay {__version__}')
     root.geometry('640x480')
     root.minsize(590, 450)
     try:
         service = LocalService()
     except Exception as exc:
-        messagebox.showerror('無法啟動 AI Run Relay', str(exc), parent=root)
+        messagebox.showerror('Could not start AI Run Relay', str(exc), parent=root)
         root.destroy()
         return 1
     frame = ttk.Frame(root, padding=24)
     frame.pack(fill='both', expand=True)
     ttk.Label(frame, text='AI Run Relay', font=('', 22, 'bold')).pack(anchor='w')
-    ttk.Label(frame, text='工作先排好，額度恢復後自動接續。').pack(anchor='w', pady=(8, 16))
-    status = tk.StringVar(value='服務已啟動。先選擇工作資料夾，再開啟控制台。')
+    ttk.Label(frame, text='Queue work and let Relay resume when quota is available.').pack(anchor='w', pady=(8, 16))
+    status = tk.StringVar(value='Service is running. Choose a workspace, then open the dashboard.')
     workspace = tk.StringVar(value=service.store.setting('workspace'))
     ttk.Label(frame, textvariable=status, wraplength=560).pack(anchor='w', pady=6)
     ttk.Label(frame, textvariable=workspace, wraplength=560).pack(anchor='w', pady=6)
@@ -90,43 +90,43 @@ def main():
                 service.engine.change_workspace(path)
                 workspace.set(path)
             except ValueError as exc:
-                messagebox.showerror('工作資料夾', str(exc), parent=root)
+                messagebox.showerror('Workspace', str(exc), parent=root)
 
     def dashboard():
         if not webbrowser.open(service.url):
-            messagebox.showinfo('控制台網址', f'請用瀏覽器開啟：\n{service.url}', parent=root)
+            messagebox.showinfo('Dashboard URL', f'Open this address in a browser:\n{service.url}', parent=root)
 
     def demo():
         service.demo()
-        status.set('已加入模擬工作：等待約 8 秒後接續，不消耗 AI 額度。')
+        status.set('Demo job added. It resumes after about 8 seconds without using AI quota.')
         dashboard()
 
     def codex_help():
         found = bool(shutil.which('codex'))
-        messagebox.showinfo('連接自己的 Codex 帳號',
-            ('已找到 Codex CLI（尚未確認登入狀態）。' if found else '尚未找到 Codex CLI。') +
-            '\n\n請依官方說明安裝並以 ChatGPT 帳號登入。\n完成後重新啟動 Relay，在控制台選擇 Codex。'
-            '\n\nRelay 不代收帳號密碼，也不會自動安裝第三方程式。', parent=root)
-        webbrowser.open('https://developers.openai.com/codex/cli')
+        messagebox.showinfo('Connect your Codex account',
+            ('Codex CLI was found; sign-in has not been verified.' if found else 'Codex CLI was not found.') +
+            '\n\nFollow the official instructions to install it and sign in with ChatGPT.\nRestart Relay and select Codex in the dashboard.'
+            '\n\nRelay never collects account passwords or installs third-party tools automatically.', parent=root)
+        webbrowser.open('https://learn.chatgpt.com/docs/codex/cli')
 
-    for label, command in [('選擇工作資料夾', choose), ('開啟工作控制台', dashboard),
-                           ('先試用：加入模擬工作', demo), ('連接 Codex／安裝說明', codex_help)]:
+    for label, command in [('Choose workspace folder', choose), ('Open dashboard', dashboard),
+                           ('Try a demo job', demo), ('Connect Codex / setup help', codex_help)]:
         ttk.Button(frame, text=label, command=command).pack(fill='x', pady=4)
-    ttk.Label(frame, text='最小化視窗可以繼續執行；關閉程式或電腦休眠會停止工作。\n'
-              '商業使用須事先書面授權：runiron.wu@gmail.com', wraplength=560).pack(anchor='w', pady=14)
+    ttk.Label(frame, text='Minimizing keeps Relay running. Closing it or putting the computer to sleep stops jobs.\n'
+              'Commercial use requires prior written authorization: runiron.wu@gmail.com', wraplength=560).pack(anchor='w', pady=14)
     closing = False
     stopped = threading.Event()
 
     def close():
         nonlocal closing
-        if closing or not messagebox.askokcancel('結束 AI Run Relay',
-                '停止排程並保存進度？進行中的工作下次可能需要確認後續跑。', parent=root):
+        if closing or not messagebox.askokcancel('Quit AI Run Relay',
+                'Stop scheduling and save progress? An interrupted job may need review before resuming.', parent=root):
             return
         closing = True
         for child in frame.winfo_children():
             if isinstance(child, ttk.Button):
                 child.state(['disabled'])
-        status.set('正在停止工作並保存進度，請稍候…')
+        status.set('Stopping jobs and saving progress. Please wait…')
         def stop():
             try:
                 service.close()

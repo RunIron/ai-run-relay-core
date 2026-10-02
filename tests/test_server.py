@@ -59,6 +59,27 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(self.store.get(job['id'])['title'], 'from HTTP')
 
+    def test_ui_preferences_persist_across_server_sessions(self):
+        status, state = self.request('GET', '/api/state')
+        self.assertEqual(status, 200)
+        auth = {'X-Relay-Token': state['csrf_token']}
+        status, result = self.request('POST', '/api/preferences', {'admin_tools_open': False}, **auth)
+        self.assertEqual(status, 200)
+        self.assertTrue(result['ok'])
+        self.assertIs(self.store.setting('admin_tools_open'), False)
+        status, refreshed = self.request('GET', '/api/state')
+        self.assertEqual(status, 200)
+        self.assertEqual(refreshed['preferences'], {'admin_tools_open': False})
+        for bad in ({'admin_tools_open': 'yes'}, {'language': 'en', 'admin_tools_open': True}):
+            with self.subTest(body=bad):
+                self.assertEqual(self.request('POST', '/api/preferences', bad, **auth)[0], 400)
+
+    def test_post_routes_ignore_query_string(self):
+        _, state = self.request('GET', '/api/state')
+        auth = {'X-Relay-Token': state['csrf_token']}
+        status, _ = self.request('POST', '/api/control?source=ui', {'action': 'resume'}, **auth)
+        self.assertEqual(status, 200)
+
     def test_invalid_body_rejected_and_pause_controls_queue(self):
         _, state = self.request('GET', '/api/state')
         auth = {'X-Relay-Token': state['csrf_token']}

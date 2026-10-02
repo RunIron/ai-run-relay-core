@@ -37,7 +37,7 @@ def make_server(engine, port=8765):
         def valid_host(self):
             hosts = {f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}"}
             if self.headers.get("Host") not in hosts:
-                self.send_data(403, {"error": "僅接受本機網址。"})
+                self.send_data(403, {"error": "Only local addresses are accepted."})
                 return False
             return True
 
@@ -55,9 +55,10 @@ def make_server(engine, port=8765):
                     since = int(query["since"][0]) if "since" in query else None
                     if page < 0 or not 1 <= size <= 100 or (since is not None and since < 0):
                         raise ValueError()
-                    self.send_data(200, dict(engine.state(page, size, since), csrf_token=token, version=__version__))
+                    self.send_data(200, dict(engine.state(page, size, since), csrf_token=token, version=__version__,
+                                         preferences={"admin_tools_open": engine.store.setting("admin_tools_open")}))
                 except ValueError:
-                    self.send_data(400, {"error": "page、page_size 或 since 格式錯誤。"})
+                    self.send_data(400, {"error": "Invalid page, page_size or since parameter."})
             elif path.startswith("/api/jobs/"):
                 parts = path.strip("/").split("/")
                 try:
@@ -65,11 +66,11 @@ def make_server(engine, port=8765):
                         raise ValueError()
                     self.send_data(200, engine.store.get(parts[2]))
                 except ValueError:
-                    self.send_data(404, {"error": "找不到工作。"})
+                    self.send_data(404, {"error": "Job not found."})
             elif path == "/api/export":
                 self.send_data(200, {"version": __version__, "jobs": engine.store.jobs(), "events": engine.store.events()})
             else:
-                self.send_data(404, {"error": "找不到頁面。"})
+                self.send_data(404, {"error": "Not found."})
 
         def do_POST(self):
             if not self.valid_host():
@@ -79,34 +80,40 @@ def make_server(engine, port=8765):
             # Compare bytes: compare_digest raises TypeError on non-ASCII str headers.
             supplied = self.headers.get("X-Relay-Token", "").encode("utf-8", "surrogateescape")
             if (origin is not None and origin != expected) or not secrets.compare_digest(supplied, token.encode()):
-                self.send_data(403, {"error": "操作驗證失敗，請重新整理頁面。"})
+                self.send_data(403, {"error": "Request verification failed. Reload the page."})
                 return
             try:
                 size = int(self.headers.get("Content-Length", "0"))
                 if not 0 < size <= 350000 or self.headers.get_content_type() != "application/json":
-                    raise ValueError("請使用 JSON，大小需小於 350 KB。")
+                    raise ValueError("Send JSON smaller than 350 KB.")
                 data = json.loads(self.rfile.read(size))
                 if not isinstance(data, dict):
-                    raise ValueError("資料必須是物件。")
-                if self.path == "/api/jobs":
+                    raise ValueError("The request body must be a JSON object.")
+                path = urlparse(self.path).path
+                if path == "/api/preferences":
+                    if set(data) != {"admin_tools_open"} or not isinstance(data["admin_tools_open"], bool):
+                        raise ValueError("Invalid interface preferences.")
+                    engine.store.set("admin_tools_open", data["admin_tools_open"])
+                    self.send_data(200, {"ok": True})
+                elif path == "/api/jobs":
                     self.send_data(201, engine.add(data))
-                elif self.path == "/api/control":
+                elif path == "/api/control":
                     if data.get("action") not in ("pause", "resume"):
-                        raise ValueError("未知操作。")
+                        raise ValueError("Unknown action.")
                     engine.store.set("paused", data["action"] == "pause")
                     self.send_data(200, {"ok": True})
-                elif self.path == "/api/workspace":
+                elif path == "/api/workspace":
                     self.send_data(200, engine.change_workspace(data.get("path")))
                 else:
-                    parts = urlparse(self.path).path.strip("/").split("/")
+                    parts = path.strip("/").split("/")
                     if len(parts) != 4 or parts[:2] != ["api", "jobs"]:
-                        self.send_data(404, {"error": "找不到操作。"})
+                        self.send_data(404, {"error": "Unknown endpoint."})
                         return
                     self.send_data(200, engine.action(parts[2], parts[3], data.get("confirmed") is True))
             except (ValueError, TypeError) as exc:
                 self.send_data(400, {"error": str(exc)})
             except Exception:
-                self.send_data(500, {"error": "服務異常；請保留資料目錄後重新啟動。"})
+                self.send_data(500, {"error": "Internal error. Keep your data folder and restart Relay."})
 
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.daemon_threads = True
@@ -121,21 +128,21 @@ def resolve_workspace(store, explicit=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AI Run Relay — 額度等待與工作接續")
+    parser = argparse.ArgumentParser(description="AI Run Relay: quota-aware waiting and job resumption")
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("--data-dir", type=Path, default=Path.home() / ".ai-run-relay")
     parser.add_argument("--workspace", type=Path, default=None,
-                        help="預設沿用已保存路徑，首次使用 ~/AI-Run-Relay-workspace")
+                        help="defaults to the saved path; first run uses ~/AI-Run-Relay-workspace")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--open", action="store_true", help="自動開啟瀏覽器")
-    parser.add_argument("--demo", action="store_true", help="加入一個不耗 AI 額度的示範工作")
-    parser.add_argument("--doctor", action="store_true", help="檢查執行環境，不讀取登入憑證")
+    parser.add_argument("--open", action="store_true", help="open the dashboard in a browser")
+    parser.add_argument("--demo", action="store_true", help="add a demo job that uses no AI quota")
+    parser.add_argument("--doctor", action="store_true", help="check the environment without reading sign-in credentials")
     args = parser.parse_args()
     if args.doctor:
-        print(f"AI Run Relay {__version__}\nPython: OK\nCodex CLI: {'已找到' if shutil.which('codex') else '未安裝（模擬模式仍可用）'}\n工作目錄: {args.workspace.resolve() if args.workspace else '沿用設定；首次使用 ~/AI-Run-Relay-workspace'}")
+        print(f"AI Run Relay {__version__}\nPython: OK\nCodex CLI: {'found' if shutil.which('codex') else 'not installed (simulation still available)'}\nWorkspace: {args.workspace.resolve() if args.workspace else 'saved setting; first run uses ~/AI-Run-Relay-workspace'}")
         return
     if not 0 <= args.port <= 65535:
-        parser.error("port 必須介於 0–65535。")
+        parser.error("port must be between 0 and 65535.")
     args.data_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     try:
         args.data_dir.chmod(0o700)  # mkdir(mode=) is ignored when the folder already exists
@@ -152,12 +159,12 @@ def main():
         try:
             server = make_server(engine, args.port)
         except OSError as exc:
-            print(f"無法使用連接埠 {args.port}（{exc.strerror or exc}）。請改用 --port 指定其他埠號。", flush=True)
+            print(f"Port {args.port} is unavailable ({exc.strerror or exc}). Use --port to choose another port.", flush=True)
             return
         if args.demo:
-            engine.add({"title": "第一趟接力：等待後自動完成", "provider": "mock", "steps": ["整理任務資料", "分析並保存結果", "完成摘要"], "wait_seconds": 8})
+            engine.add({"title": "Relay demo: resume after waiting", "provider": "mock", "steps": ["Organize materials", "Analyze and save results", "Write the summary"], "wait_seconds": 8})
         url = f"http://127.0.0.1:{server.server_port}"
-        print(f"AI Run Relay {__version__}\n控制台：{url}\n資料目錄：{args.data_dir.resolve()}\n按 Ctrl+C 停止。", flush=True)
+        print(f"AI Run Relay {__version__}\nDashboard: {url}\nData folder: {args.data_dir.resolve()}\nPress Ctrl+C to stop.", flush=True)
         engine.start()
         if args.open:
             webbrowser.open(url)

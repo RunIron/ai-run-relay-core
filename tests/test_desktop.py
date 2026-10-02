@@ -7,7 +7,17 @@ from relay.desktop import LocalService
 from relay.entry import self_test
 
 
+def tcl_available():
+    try:
+        import tkinter
+        tkinter.Tcl()
+        return True
+    except Exception:
+        return False
+
+
 class DesktopTest(unittest.TestCase):
+    @unittest.skipUnless(tcl_available(), 'this Python has no working Tcl/Tk; the packaged build tests it')
     def test_install_smoke_wait_output_restart(self):
         import json
         with tempfile.TemporaryDirectory() as folder:

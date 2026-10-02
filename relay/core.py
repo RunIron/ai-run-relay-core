@@ -9,6 +9,8 @@ import time
 import uuid
 from pathlib import Path
 
+LOCKED = "This data folder is already in use by another AI Run Relay process."
+
 
 class InstanceLock:
     """OS-held lock; released by the OS after a crash (not a stale PID file)."""
@@ -16,7 +18,7 @@ class InstanceLock:
         try:
             self.file = open(path, "a+b")
         except PermissionError:
-            raise RuntimeError("這個資料目錄已由另一個 AI Run Relay 使用。") from None
+            raise RuntimeError(LOCKED) from None
         try:
             self.file.seek(0)
             if self.file.read(1) == b"":
@@ -25,7 +27,7 @@ class InstanceLock:
             self.file.seek(0)
         except PermissionError:
             self.file.close()
-            raise RuntimeError("這個資料目錄已由另一個 AI Run Relay 使用。") from None
+            raise RuntimeError(LOCKED) from None
         try:
             if os.name == "nt":
                 import msvcrt
@@ -35,7 +37,7 @@ class InstanceLock:
                 fcntl.flock(self.file, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             self.file.close()
-            raise RuntimeError("這個資料目錄已由另一個 AI Run Relay 使用。") from None
+            raise RuntimeError(LOCKED) from None
 
     def close(self):
         self.file.close()
@@ -128,7 +130,7 @@ class Store:
         with self.lock:
             row = self.db.execute("SELECT data FROM jobs WHERE id=?", (job_id,)).fetchone()
             if not row:
-                raise ValueError("找不到工作。")
+                raise ValueError("Job not found.")
             return json.loads(row[0])
 
     def jobs(self):
@@ -179,36 +181,41 @@ class Engine:
             for summary in store.summaries(("running",)):
                 job = store.get(summary["id"])
                 if job["status"] == "running":
-                    job["status"] = "queued" if job["provider"] == "mock" else "needs_review"
-                    job["last_error"] = "執行期間程式中斷。請先確認最後一步的實際結果，再決定續跑。"
-                    store.save(job, "啟動復原：保留已完成步驟，檢查未完成執行。")
+                    if job["provider"] == "mock":
+                        # Simulated steps have no external side effects; rerun them safely.
+                        job.update(status="queued", last_error="")
+                    else:
+                        job.update(status="needs_review", last_error=(
+                            "Relay stopped while this step was running. Check the actual result "
+                            "of the last step before resuming."))
+                    store.save(job, "Startup recovery: completed steps kept; the interrupted step needs a check.")
 
     def add(self, data):
         if not isinstance(data, dict):
-            raise ValueError("工作資料必須是物件。")
+            raise ValueError("Job data must be a JSON object.")
         title, steps = data.get("title", ""), data.get("steps", [])
         provider = data.get("provider", "mock")
         if provider not in ("mock", "codex"):
-            raise ValueError("第一版僅支援模擬與 Codex。")
+            raise ValueError("Only the simulation and Codex providers are supported.")
         if not isinstance(title, str) or not title.strip() or len(title) > 200:
-            raise ValueError("工作名稱需為 1–200 字。")
+            raise ValueError("Job name must be 1–200 characters.")
         if not isinstance(steps, list) or not 1 <= len(steps) <= 30 or any(
             not isinstance(s, str) or not s.strip() or len(s) > 10000 for s in steps
         ):
-            raise ValueError("請提供 1–30 個非空白步驟，每個最多 10000 字。")
+            raise ValueError("Provide 1–30 non-empty steps, each up to 10,000 characters.")
         priority = data.get("priority", 0)
         wait = data.get("wait_seconds", 8) if provider == "mock" else 8
         if type(priority) is not int or not 0 <= priority <= 10:
-            raise ValueError("優先權必須是 0–10 的整數。")
+            raise ValueError("Priority must be an integer from 0 to 10.")
         if type(wait) is not int or not 1 <= wait <= 86400:
-            raise ValueError("模擬等待需為 1–86400 秒。")
+            raise ValueError("Simulation wait must be 1–86,400 seconds.")
         raw_cwd = data.get("cwd") or str(self.workspace)
         if not isinstance(raw_cwd, str):
-            raise ValueError("工作目錄格式錯誤。")
+            raise ValueError("Invalid working folder.")
         cwd = Path(raw_cwd).expanduser()
         cwd = (self.workspace / cwd).resolve() if not cwd.is_absolute() else cwd.resolve()
         if not cwd.is_dir() or not cwd.is_relative_to(self.workspace):
-            raise ValueError("工作目錄必須存在，且位於啟動時指定的 workspace 內。")
+            raise ValueError("The working folder must exist inside the current workspace.")
         now = self.clock()
         job = dict(id=uuid.uuid4().hex, title=title.strip(), provider=provider, steps=[s.strip() for s in steps],
                    cwd=str(cwd), priority=priority, status="queued", created_at=now, updated_at=now,
@@ -216,7 +223,7 @@ class Engine:
                    deadline=now + 7 * 86400, last_error="", session_id=None, outputs=[],
                    wait_seconds=wait, mock_waited=False, retry_source=None, partial_output="",
                    resync_context=False, workspace_root=str(self.workspace))
-        self.store.save(job, "工作已排入佇列。" + ("（模擬，不呼叫 AI）" if provider == "mock" else ""))
+        self.store.save(job, "Job added to queue." + (" (Simulation; no AI is called.)" if provider == "mock" else ""))
         return job
 
     def action(self, job_id, action, confirmed=False):
@@ -224,29 +231,31 @@ class Engine:
             job = self.store.get(job_id)
             if action == "cancel":
                 if job["status"] in ("succeeded", "cancelled"):
-                    raise ValueError("這項工作已結束。")
+                    raise ValueError("This job has already finished.")
                 job["status"] = "cancelled"
                 if self.active_id == job_id:
                     self.active_stop.set()
             elif action in ("resume", "retry"):
                 required = "needs_review" if action == "resume" else "failed"
                 if job["status"] != required:
-                    raise ValueError("目前狀態不能執行此操作。")
+                    raise ValueError("This action is not available in the job's current state.")
                 if not confirmed:
-                    raise ValueError("請確認已檢查上次執行結果，允許重試未完成步驟。")
+                    raise ValueError("Confirm that you reviewed the last result before the unfinished step is retried.")
                 job.update(status="queued", step_attempts=0, next_run_at=0, last_error="",
                            deadline=self.clock() + 7 * 86400, resync_context=True)
             else:
-                raise ValueError("未知操作。")
-            self.store.save(job, {"cancel": "工作已取消；執行中的外部操作可能已發生。", "resume": "使用者確認後續跑。", "retry": "使用者確認後重試。"}[action])
+                raise ValueError("Unknown action.")
+            self.store.save(job, {"cancel": "Job cancelled. External actions already in progress may have happened.",
+                                  "resume": "Resumed after user confirmation.",
+                                  "retry": "Retried after user confirmation."}[action])
             return job
 
     def change_workspace(self, raw_path):
         if not isinstance(raw_path, str) or not raw_path.strip():
-            raise ValueError("請輸入已存在的絕對路徑。")
-        path = Path(raw_path).expanduser()
+            raise ValueError("Enter an existing absolute folder path.")
+        path = Path(raw_path.strip()).expanduser()
         if not path.is_absolute() or not path.is_dir():
-            raise ValueError("工作資料夾必須存在，且使用絕對路徑。")
+            raise ValueError("The workspace must be an existing folder given as an absolute path.")
         with self.store.lock:
             self.workspace = path.resolve()
             self.store.set("workspace", str(self.workspace))
@@ -284,14 +293,18 @@ class Engine:
                 job = summary
                 if now >= job["deadline"]:
                     job = self.store.get(job["id"])
-                    job.update(status="failed", last_error="超過七天等待期限，請檢查後手動重試。")
-                    self.store.save(job, "等待期限已到。")
+                    job.update(status="failed", last_error="The 7-day waiting limit was reached. Review the job, then retry it manually.")
+                    self.store.save(job, "Waiting limit reached.")
                     continue
                 due = max(job["next_run_at"], cooldowns.get(job["provider"], 0))
                 if due > now:
-                    if job["status"] != "waiting_quota" or job["next_run_at"] != due:
+                    if job["status"] != "waiting_quota" or job["next_run_at"] != due or due >= job["deadline"]:
                         job = self.store.get(job["id"])
                         job.update(status="waiting_quota", next_run_at=due)
+                        if due >= job["deadline"]:
+                            # A shared platform wait (e.g. a weekly reset) must extend every
+                            # waiting job, not only the one that received the quota reply.
+                            job["deadline"] = due + 3600
                         self.store.save(job)
                     continue
                 candidates.append(job)
@@ -303,7 +316,7 @@ class Engine:
                        step_attempts=job["step_attempts"] + 1, next_run_at=0)
             self.active_id = job["id"]
             self.active_stop = threading.Event()
-            self.store.save(job, f"執行步驟 {job['step_index'] + 1}/{len(job['steps'])}。")
+            self.store.save(job, f"Running step {job['step_index'] + 1} of {len(job['steps'])}.")
 
         try:
             from .codex import Result
@@ -311,27 +324,32 @@ class Engine:
                 if self.active_stop.wait(0.25):
                     result = Result("cancelled")
                 elif not job["mock_waited"] and job["step_index"] == min(1, len(job["steps"]) - 1):
-                    result = Result("quota", error="模擬額度耗盡", retry_at=self.clock() + job["wait_seconds"])
+                    result = Result("quota", error="Simulated quota exhausted.", retry_at=self.clock() + job["wait_seconds"])
                 else:
-                    result = Result("success", output=f"[模擬輸出，非 AI 生成]\n步驟 {job['step_index'] + 1}：{job['steps'][job['step_index']]}\n排程與檢查點已驗證。")
+                    result = Result("success", output=(
+                        "[Simulated output; not AI-generated]\n"
+                        f"Step {job['step_index'] + 1}: {job['steps'][job['step_index']]}\n"
+                        "Scheduling and checkpointing verified."))
             else:
                 # A resumed thread already holds earlier turns; re-sending every prior output
                 # each step makes token use grow quadratically. Send them only for a new
                 # thread or the first run after a manual resume/retry.
                 if job["outputs"] and (not job.get("session_id") or job.get("resync_context")):
-                    prior = "\n\n".join(f"完成步驟 {i+1}：\n{x}" for i, x in enumerate(job["outputs"]))
+                    prior = "\n\n".join(f"Completed step {i + 1}:\n{x}" for i, x in enumerate(job["outputs"]))
                 elif job["outputs"]:
-                    prior = "（前步驟成果已在本工作階段的先前回合中。）"
+                    prior = "(Earlier step results are already in previous turns of this session.)"
                 else:
-                    prior = "（無）"
-                prompt = ("你正在執行 AI Run Relay 的唯讀分析工作。請只執行本次步驟，勿修改檔案或發送外部訊息。\n"
-                          f"工作：{job['title']}\n已保存的前步驟結果：\n{prior}\n"
-                          f"本次步驟 {job['step_index'] + 1}：{job['steps'][job['step_index']]}\n"
-                          "如為中斷續跑，先確認既有結果；不要重做已完成步驟。請回傳本步驟最終成果。")
+                    prior = "(none)"
+                prompt = ("You are running a read-only analysis job for AI Run Relay. Perform only the current step. "
+                          "Do not modify files or send external messages.\n"
+                          f"Job: {job['title']}\nSaved results from earlier steps:\n{prior}\n"
+                          f"Current step {job['step_index'] + 1}: {job['steps'][job['step_index']]}\n"
+                          "If this is a resumed run, check existing results first and do not redo completed steps. "
+                          "Reply with the final result for this step.")
                 result = self.adapters[job["provider"]].run(job, prompt, lambda sid: self._session(job["id"], sid), self.active_stop)
         except Exception:
             # An unknown failure after submission is not safe to blindly repeat.
-            result = Result("review", error="執行器異常，無法確認最後一步結果。請檢查後再續跑。")
+            result = Result("review", error="The provider failed unexpectedly, so the last step's result is unknown. Review it before resuming.")
 
         with self.store.lock:
             current = self.store.get(job["id"])
@@ -339,7 +357,7 @@ class Engine:
             notices = getattr(result, "notices", None) or []
             if notices:
                 current["adapter_notices"] = notices
-                self.store.save(current, "；".join(notices))
+                self.store.save(current, " ".join(notices))
             if current["status"] != "running":
                 return True
             if result.quota is not None:
@@ -352,10 +370,10 @@ class Engine:
                 current["step_index"] += 1
                 current.update(status="succeeded" if current["step_index"] == len(current["steps"]) else "queued",
                                step_attempts=0, last_error="", retry_source=None, resync_context=False)
-                message = "工作完成，結果已保存。" if current["status"] == "succeeded" else "步驟完成，已保存檢查點。"
+                message = "Job completed; results saved." if current["status"] == "succeeded" else "Step completed; checkpoint saved."
             elif result.kind == "quota":
                 current["mock_waited"] = True
-                current["last_error"] = result.error or "平台額度暫時不足。"
+                current["last_error"] = result.error or "Platform quota is temporarily unavailable."
                 known = result.retry_at is not None
                 due = max(self.clock() + 5, result.retry_at + 2) if known else self.clock() + min(3600, 300 * 2 ** (current["step_attempts"] - 1))
                 current.update(status="waiting_quota", next_run_at=due, retry_source="platform" if known else "estimated")
@@ -370,16 +388,17 @@ class Engine:
                     # e.g. a weekly window that resets after the 7-day deadline
                     current["deadline"] = due + 3600
                 if current["step_attempts"] >= current["max_attempts"]:
-                    current.update(status="needs_review", last_error="已達自動嘗試上限，請檢查配額後手動續跑。")
+                    current.update(status="needs_review", last_error="Automatic retry limit reached. Check your quota, then resume manually.")
                     message = current["last_error"]
                 else:
-                    message = "額度不足，等待後再確認。" if known else "恢復時間未知，採有限次退避重試（預估）。"
+                    message = ("Quota unavailable; waiting for the reported reset." if known
+                               else "Reset time unknown; retrying with limited backoff (estimated).")
             elif result.kind == "cancelled" and job["provider"] == "mock":
                 current.update(status="queued", last_error="")
-                message = "模擬工作因停止服務中斷，已重新排隊。"
+                message = "Simulated job interrupted by shutdown and re-queued."
             else:
                 current.update(status={"cancelled": "needs_review", "failed": "failed"}.get(result.kind, "needs_review"),
-                               last_error=result.error or "執行中斷，請確認結果。")
+                               last_error=result.error or "The run was interrupted. Check the result.")
                 message = current["last_error"]
             self.store.save(current, message)
         return True
@@ -387,7 +406,11 @@ class Engine:
     def start(self):
         def loop():
             while not self.shutdown.is_set():
-                self.tick()
+                try:
+                    self.tick()
+                except Exception:
+                    # Never let one bad tick silently kill the only worker thread.
+                    self.shutdown.wait(5)
                 self.shutdown.wait(0.4)
         self.thread = threading.Thread(target=loop, name="relay-worker", daemon=True)
         self.thread.start()

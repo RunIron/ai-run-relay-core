@@ -1,58 +1,58 @@
-# AI Run Relay 一般使用者安裝方式
+# Installing AI Run Relay
 
-本文件說明編譯後的安裝包。PUBLIC-INTRO.zip 只有文件，不是安裝包。
-目前 v0.1.4 屬測試版本；請以實際附上的檔案及驗證報告為準。
+This guide covers the compiled installer packages. PUBLIC-INTRO.zip contains documentation only and is not an installer.
+v0.1.6 is a test release; rely on the files actually attached and on the validation record.
 
-## Windows 10/11，x64
+## Windows 10/11, x64
 
-取得 `AI-Run-Relay-0.1.4-windows-x64-setup.exe` 後，雙擊、閱讀授權、完成安裝。
-從開始功能表開啟 AI Run Relay。無須另外安裝 Python。
-未簽署的測試版可能顯示未知發行者；請先核對來源與 SHA256，不要關閉防毒。
-安裝至目前使用者，不要求管理員權限。解除安裝後保留工作紀錄。
+Download `AI-Run-Relay-0.1.6-windows-x64-setup.exe`, double-click it, read the license, and finish the setup.
+Open AI Run Relay from the Start menu. You do not need to install Python.
+Unsigned test builds may show "Unknown publisher". Verify the source and the SHA256 checksum first; do not turn off your antivirus.
+It installs for the current user and does not need administrator rights. Uninstalling keeps your job history.
 
-## Linux，x86_64
+## Linux, x86_64
 
-Ubuntu/Debian 桌面：下載 `.deb`，在檔案所在目錄執行：
+Ubuntu/Debian desktop: download the `.deb` and run this in the folder that contains it:
 
 ```sh
-sudo apt install ./AI-Run-Relay-0.1.4-linux-amd64.deb
+sudo apt install ./AI-Run-Relay-0.1.6-linux-amd64.deb
 ```
 
-從應用程式選單開啟 AI Run Relay，或執行 `ai-run-relay`。
-安裝需要管理員權限；日常執行請用一般使用者，不要 sudo。
-無須另外安裝 Python。套件管理員會處理必要的系統函式庫。
-本次 Linux 包最低要求 glibc 2.39，建置測試環境為 Ubuntu 24.04 x64；不支援 Alpine/musl 或 ARM。
+Open AI Run Relay from the application menu, or run `ai-run-relay`.
+Installing needs administrator rights; run it day to day as a regular user, not with sudo.
+You do not need to install Python. The package manager installs the required system libraries.
+The minimum glibc version depends on the build host (Ubuntu 24.04 builds require glibc 2.39). Alpine/musl and ARM are not supported.
 
-其他使用 glibc 的 Linux：解壓縮 `.tar.gz`，進入該資料夾，執行 `./ai-run-relay`。
-壓縮包不會自動安裝系統函式庫；其他發行版仍需個別驗證。
+Other glibc-based Linux: extract the `.tar.gz`, enter the folder, and run `./ai-run-relay`.
+The archive does not install system libraries; other distributions still need individual verification.
 
-沒有桌面的 Linux 伺服器，使用：
+On a Linux server without a desktop, use:
 
 ```sh
 ai-run-relay --server --port 8765
 ```
 
-預設只允許本機瀏覽器連入。從自己的電腦存取遠端伺服器時，可使用：
+By default only a browser on the same machine can connect. To reach a remote server from your own computer, use:
 
 ```sh
-ssh -L 8765:127.0.0.1:8765 你的使用者@伺服器
+ssh -L 8765:127.0.0.1:8765 your-user@server
 ```
 
-再開啟 http://127.0.0.1:8765。服務不會自動註冊為開機常駐服務。
+Then open http://127.0.0.1:8765. The service does not register itself to start at boot.
 
-## 第一次使用
+## First use
 
-1. 開啟程式，按「選擇工作資料夾」，選擇要分析的資料所在地。
-2. 按「先試用：加入模擬工作」，在控制台觀察等待後自動接續。模擬不消耗 AI 額度。
-3. 真實 AI 工作需另外安裝官方 Codex CLI，並使用自己的 ChatGPT 帳號登入。
-   啟動視窗有官方說明入口。Relay 不附帶 Codex、不代收帳密、不提供 AI 額度。
-4. 登入後重啟 Relay，在控制台選擇 Codex，先建立一個小型唯讀分析工作。
+1. Open the program, click **Choose workspace folder**, and pick the folder that holds the data you want analyzed.
+2. Click **Try a demo job** and watch the dashboard wait and then resume automatically. The demo uses no AI quota.
+3. Real AI jobs need the official Codex CLI, signed in with your own ChatGPT account.
+   The launcher window has a link to the official instructions. Relay does not bundle Codex, collect passwords, or provide AI quota.
+4. After signing in, restart Relay, choose **Codex CLI** in the dashboard, and start with a small read-only analysis job.
 
-關閉瀏覽器不會停止工作。請保留 Relay 啟動視窗，可將它最小化。
-關閉程式會停止排程；電腦關機或休眠期间不能執行。中斷的工作可能需要確認後續跑。
-升級前先結束 Relay。紀錄保留在使用者家目錄的 `.ai-run-relay`，工作資料夾不在安裝目錄內。
+Closing the browser does not stop jobs. Keep the Relay launcher window open; you can minimize it.
+Quitting the program stops scheduling, and nothing runs while the computer is off or asleep. An interrupted job may need review before it resumes.
+Quit Relay before upgrading. Your history is kept in `.ai-run-relay` in your home folder; the workspace is not inside the install folder.
 
-目前僅支援 Mock 與 Codex；Codex 為唯讀分析／文字成果模式，真實 CLI 相容性需實機驗證。
-額度恢復依平台實際資訊，不保證固定五小時，也不繞過平台限制。
+Only the simulation and Codex providers are supported. Codex runs in read-only analysis / text-result mode, and real CLI compatibility still needs hands-on verification.
+Quota resets follow the platform's actual information. Relay does not guarantee a fixed five-hour window and does not bypass platform limits.
 
-非商業使用適用隨附 LICENSE。商業用途須事先取得書面授權：runiron.wu@gmail.com。
+Non-commercial use is covered by the included LICENSE. Commercial use requires prior written authorization: runiron.wu@gmail.com.

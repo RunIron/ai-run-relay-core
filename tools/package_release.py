@@ -7,7 +7,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_FILES = ("README.md", "COMMERCIAL_USE.md", "INSTALL.md")
-OWNER_ROOT_FILES = ("README.md", "LICENSE", "pyproject.toml", ".gitignore", "start.bat", "start.command", "launcher.py")
+OWNER_ROOT_FILES = ("README.md", "CHANGELOG.md", "LICENSE", "pyproject.toml", ".gitignore", "start.bat", "start.command", "launcher.py")
 OWNER_DIRS = ("relay", "tests", "tools", "docs", "public", "packaging", ".github")
 EXTENSIONS = {".py", ".html", ".md", ".cjs", ".json", ".txt", ".iss", ".desktop", ".yml"}
 

@@ -104,6 +104,24 @@ class RegressionTests(unittest.TestCase):
         saved = self.store.get(job['id'])
         self.assertGreater(saved['deadline'], saved['next_run_at'])
 
+    def test_shared_late_reset_extends_other_waiting_jobs(self):
+        reset = 1000 + 8 * 86400
+        adapter = FakeAdapter(Result('quota', retry_at=reset), Result('success', output='a'), Result('success', output='b'))
+        e = self.engine(adapter)
+        first = e.add({'title': 'first', 'provider': 'codex', 'steps': ['one'], 'priority': 10})
+        other = e.add({'title': 'other', 'provider': 'codex', 'steps': ['one']})
+        e.tick()  # first job receives the 8-day reset
+        self.assertFalse(e.tick())  # other job joins the shared wait
+        self.assertGreater(self.store.get(other['id'])['deadline'], reset)
+        self.now = 1000 + 7 * 86400 + 1  # past the original 7-day deadline
+        self.assertFalse(e.tick())
+        for job in (first, other):
+            self.assertEqual(self.store.get(job['id'])['status'], 'waiting_quota')
+        self.now = reset + 2
+        e.tick(); e.tick()
+        for job in (first, other):
+            self.assertEqual(self.store.get(job['id'])['status'], 'succeeded')
+
     def test_non_ascii_token_rejected_cleanly(self):
         server = make_server(self.engine(), 0)
         t = threading.Thread(target=server.serve_forever, daemon=True)

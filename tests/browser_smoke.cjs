@@ -13,7 +13,7 @@ const { chromium } = require('playwright');
     page.on('pageerror', e => errors.push(e.message));
     let revision = 60, detailRequests = 0, fullRequests = 0;
     const jobs = Array.from({length: 60}, (_, i) => ({
-      id: `job-${60-i}`, title: `工作 ${60-i}`, provider: 'mock', status: 'succeeded',
+      id: `job-${60-i}`, title: `Job ${60-i}`, provider: 'mock', status: 'succeeded',
       priority: 5, created_at: i+1, updated_at: i+1, revision: 60-i, next_run_at: 0,
       step_index: 1, steps_count: 1, next_step: '', attempts: 1, last_error: '',
       session_id: null, output_count: 1, has_partial: false, retry_source: null
@@ -35,7 +35,7 @@ const { chromium } = require('playwright');
       } else if (url.pathname.startsWith('/api/jobs/')) {
         detailRequests++;
         const j = jobs.find(j => j.id === url.pathname.split('/').pop());
-        data = {...j, steps: ['分析'], cwd: '/work', outputs: [Array.from({length: 300}, (_,i)=>`RESULT LINE ${i}`).join('\n')], partial_output: ''};
+        data = {...j, steps: ['Analyze'], cwd: '/work', outputs: [Array.from({length: 300}, (_,i)=>`RESULT LINE ${i}`).join('\n')], partial_output: ''};
       } else return route.fulfill({status: 404, body: '{}'});
       await route.fulfill({contentType: 'application/json', body: JSON.stringify(data)});
     });

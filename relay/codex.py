@@ -83,6 +83,11 @@ def _missing_thread(error):
         'no rollout found for thread id', 'no rollout found for thread'))
 
 
+# The packaged Windows app has no console; without this flag every codex.cmd
+# shim (and taskkill) would pop up a visible terminal window.
+_NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+
+
 class _Abort(Exception):
     def __init__(self, kind, message):
         self.kind, self.message = kind, message
@@ -115,7 +120,7 @@ class CodexAdapter:
         candidate = os.fspath(self.executable)
         executable = candidate if candidate.lower().endswith('.py') and Path(candidate).is_file() else shutil.which(candidate)
         if executable is None:
-            return Result('review', error='找不到 Codex CLI；請先安裝並以 ChatGPT 帳號執行 codex login。')
+            return Result('review', error='Codex CLI was not found. Install it, then sign in with your ChatGPT account (codex login).')
         proc = None
         inbox = queue.Queue()
         messages, quota, pending = {}, {}, []
@@ -146,11 +151,11 @@ class CodexAdapter:
                 if stop.is_set():
                     raise _Abort('cancelled', '')
                 if time.monotonic() >= min(deadline, request_deadline or deadline):
-                    raise _Abort('review', 'Codex 執行逾時；進度已保留，請檢查後再續做。')
+                    raise _Abort('review', 'Codex timed out. Saved progress is kept; review the job before resuming.')
                 try:
                     payload = inbox.get(timeout=0.1)
                     if payload is None:
-                        raise _Abort('review', 'Codex app-server 已結束；請檢查 CLI 與登入狀態。')
+                        raise _Abort('review', 'Codex app-server exited. Check the CLI installation and sign-in status.')
                     return payload
                 except queue.Empty:
                     continue
@@ -167,11 +172,11 @@ class CodexAdapter:
                     result = {'action': 'decline', 'content': None}
                 else:
                     send({'id': payload['id'], 'error': {'code': -32601, 'message': 'Interactive requests require manual review'}})
-                    raise _Abort('review', '此工作需要人工輸入或核准，已暫停。')
+                    raise _Abort('review', 'This job asked for manual input or approval, so it was paused.')
                 send({'id': payload['id'], 'result': result})
-                raise _Abort('review', '此工作需要額外權限，已拒絕並暫停。')
+                raise _Abort('review', 'This job asked for extra permissions. The request was declined and the job paused.')
             if method == 'account/updated' and params.get('authMode') != 'chatgpt':
-                raise _Abort('review', '登入模式已改變；僅支援由官方 CLI 管理的 ChatGPT 登入。')
+                raise _Abort('review', 'The sign-in mode changed. Only ChatGPT sign-in managed by the official CLI is supported.')
             if method == 'account/rateLimits/updated':
                 quota = params
             if turn_id is None and params.get('turnId') is not None:
@@ -249,9 +254,9 @@ class CodexAdapter:
                     if turn.get('id') == turn_id and turn.get('status') in ('interrupted', 'completed', 'failed'):
                         turn_finished = True
                         if sent:
-                            notices.append('已收到工作階段停止確認：' + turn.get('status', 'unknown'))
+                            notices.append('Session stop confirmed: ' + turn.get('status', 'unknown'))
                         return
-            notices.append('停止確認逾時，已關閉本機程序；請檢查原工作階段。')
+            notices.append('Stop confirmation timed out, so the local process was closed. Check the original session.')
         try:
             # Force subscription authentication/provider; never use inherited API keys.
             env = dict(os.environ)
@@ -263,17 +268,17 @@ class CodexAdapter:
             proc = subprocess.Popen(command,
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                 text=True, encoding='utf-8', errors='replace', env=env, cwd=job['cwd'],
-                start_new_session=(os.name == 'posix'))
+                start_new_session=(os.name == 'posix'), creationflags=_NO_WINDOW)
             threading.Thread(target=reader, daemon=True).start()
             request('initialize', {'clientInfo': {'name': 'ai_run_relay', 'version': __version__}})
             send({'method': 'initialized', 'params': {}})
             account = request('account/read', {'refreshToken': False}).get('account') or {}
             if account.get('type') != 'chatgpt':
-                return Result('review', error='請先使用官方 codex login 登入 ChatGPT；API key 登入不會執行。')
+                return Result('review', error='Sign in with ChatGPT using the official "codex login" first. API-key sign-in is not used.')
             # Inspect effective settings through the public protocol, never auth files.
             config = request('config/read', {'includeLayers': False, 'cwd': job['cwd']}).get('config')
             if not isinstance(config, dict):
-                return Result('review', error='無法驗證 Codex 設定；請更新 CLI 後重試。')
+                return Result('review', error='Could not verify the Codex configuration. Update the CLI and try again.')
             def enabled_entries(entries):
                 return bool(entries) and (not isinstance(entries, dict) or any(
                     not isinstance(value, dict) or value.get('enabled') is not False
@@ -289,7 +294,7 @@ class CodexAdapter:
             hook_paths.extend(parent / '.codex' / 'hooks.json' for parent in (cwd_path, *cwd_path.parents))
             unsafe = unsafe or any(path.exists() for path in hook_paths)
             if unsafe:
-                return Result('review', error='此 MVP 僅支援未啟用 MCP、plugins、hooks 或 notify 的乾淨 Codex 設定；請先人工檢查。')
+                return Result('review', error='Relay only runs with a clean Codex configuration: no enabled MCP servers, plugins, hooks or notify. Review your Codex settings first.')
             quota = request('account/rateLimits/read')
             exhausted, retry_at = quota_wait(quota, limit_id)
             if exhausted:
@@ -304,8 +309,8 @@ class CodexAdapter:
                     raise
                 params.pop('threadId', None)
                 result = request('thread/start', params)
-                prompt += '\n\n已保存的先前成果（工作階段復原用）：\n' + json.dumps(job.get('outputs', []), ensure_ascii=False)
-                notices.append('原工作階段已不存在；已建立新工作階段，依保存的檢查點繼續。')
+                prompt += '\n\nSaved results from earlier steps (for session recovery):\n' + json.dumps(job.get('outputs', []), ensure_ascii=False)
+                notices.append('The original session no longer exists. A new session was started from the saved checkpoint.')
             session_id = result['thread']['id']
             on_session(session_id)
             result = request('turn/start', {'threadId': session_id,
@@ -323,7 +328,7 @@ class CodexAdapter:
                     if turn.get('status') == 'completed':
                         if not output().strip():
                             # Never checkpoint an empty result as a finished step.
-                            return Result('review', error='Codex 回報完成，但沒有收到文字成果；請檢查工作階段後再續跑。', quota=quota, notices=notices, partial_output='\n\n'.join(messages.values()))
+                            return Result('review', error='Codex reported completion but returned no text result. Check the session before resuming.', quota=quota, notices=notices, partial_output='\n\n'.join(messages.values()))
                         return Result('success', output=output(), quota=quota, notices=notices, partial_output='\n\n'.join(messages.values()))
                     if _is_quota(turn.get('error')):
                         try:
@@ -331,19 +336,19 @@ class CodexAdapter:
                         except _Abort as exc:
                             if exc.kind == 'cancelled':
                                 raise
-                            notices.append('額度更新未能確認，保留最後已知用量。')
+                            notices.append('Could not refresh quota; keeping the last known usage.')
                         except _RPCError:
-                            notices.append('額度更新未能確認，保留最後已知用量。')
+                            notices.append('Could not refresh quota; keeping the last known usage.')
                         return Result('quota', output=output(), retry_at=quota_wait(quota, limit_id)[1], quota=quota, notices=notices, partial_output='\n\n'.join(messages.values()))
-                    return Result('review' if turn.get('status') == 'interrupted' else 'failed', output=output(), error='Codex 工作未完成；請檢查後續做。', quota=quota, notices=notices, partial_output='\n\n'.join(messages.values()))
+                    return Result('review' if turn.get('status') == 'interrupted' else 'failed', output=output(), error='The Codex turn did not complete. Review it before resuming.', quota=quota, notices=notices, partial_output='\n\n'.join(messages.values()))
         except _Abort as exc:
             return Result(exc.kind, output=output(), error=exc.message, quota=quota, notices=notices, partial_output='\n\n'.join(messages.values()))
         except _RPCError as exc:
             if _is_quota(exc.payload):
                 return Result('quota', output=output(), retry_at=quota_wait(quota, limit_id)[1], quota=quota, notices=notices, partial_output='\n\n'.join(messages.values()))
-            return Result('review', output=output(), error='Codex 拒絕請求；請檢查 CLI 版本、登入與設定。', quota=quota, notices=notices, partial_output='\n\n'.join(messages.values()))
+            return Result('review', output=output(), error='Codex rejected the request. Check the CLI version, sign-in and configuration.', quota=quota, notices=notices, partial_output='\n\n'.join(messages.values()))
         except Exception:
-            return Result('review', output=output(), error='Codex 連線或回應格式異常；請檢查 CLI 版本。', quota=quota, notices=notices, partial_output='\n\n'.join(messages.values()))
+            return Result('review', output=output(), error='Unexpected Codex connection or response format. Check the CLI version.', quota=quota, notices=notices, partial_output='\n\n'.join(messages.values()))
         finally:
             if proc is not None:
                 if proc.poll() is None:
@@ -359,7 +364,8 @@ class CodexAdapter:
                             # npm installs codex as a .cmd shim; terminate() would only stop
                             # cmd.exe and leave node/codex running. Kill the whole tree.
                             subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)],
-                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+                                           creationflags=_NO_WINDOW)
                         proc.wait(timeout=2)
                     except (OSError, subprocess.TimeoutExpired):
                         if os.name == 'posix':
