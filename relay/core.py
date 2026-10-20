@@ -170,7 +170,8 @@ class Engine:
         self.workspace.mkdir(parents=True, exist_ok=True)
         if adapters is None:
             from .codex import CodexAdapter
-            adapters = {"codex": CodexAdapter()}
+            from .claude_code import ClaudeCodeAdapter
+            adapters = {"codex": CodexAdapter(), "claude": ClaudeCodeAdapter()}
         self.adapters = adapters
         self.shutdown = threading.Event()
         self.active_stop = threading.Event()

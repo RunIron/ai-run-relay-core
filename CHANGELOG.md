@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.8 (2026-10-20)
+
+### Claude Code provider
+
+- Add `relay/claude_code.py`: runs the official `claude` CLI as a one-shot `-p --output-format json` subprocess per step, registered as the `claude` provider alongside `codex` and `mock`. No persistent session protocol like Codex's app-server; each step is an independent call, resumed via `--resume <session_id>` with a one-time automatic recovery (new session + replayed checkpoint outputs) if the session is gone.
+- Read-only enforcement: `--permission-mode dontAsk --permission-prompts none --restricted --strict-mcp-config --safe-mode --disallowedTools "Bash,Edit,Write,NotebookEdit,Task,WebFetch,ExitPlanMode"`. `ANTHROPIC_API_KEY` is stripped from the subprocess environment so a job can never fall back to separately billed API usage.
+- Usage-limit detection is text-based (no official structured query exists for Claude Code), so the reset time is always reported as unknown; jobs fall back to the existing estimated backoff. Credited to [claude-nightshift](https://github.com/dujunyi416/claude-nightshift) (MIT) for the phrase list, without adopting its credential-file reads or undocumented-endpoint call.
+- **Known, documented, unresolved:** Anthropic's Agent SDK terms restrict third-party products from offering claude.ai sign-in/rate-limit reuse without prior approval. This provider does exactly that (the same pattern already used for Codex/ChatGPT). See README and `docs/ARCHITECTURE.md#providers`.
+- Dashboard: added the "Claude Code" option to the provider dropdown; provider detection, notes, and the new-job form generalized to not special-case `codex`.
+- Verified by hand against the real `claude` 2.1.304 CLI during development (read-only analysis, session resume, and a blocked write attempt with no stray files anywhere on disk, including outside the job's workspace) in addition to `tests/test_claude_code.py`'s offline fake-CLI suite.
+
 ## 0.1.7 (2026-10-20)
 
 ### Pluggable providers

@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/RunIron/ai-run-relay-core/actions/workflows/test.yml/badge.svg)](https://github.com/RunIron/ai-run-relay-core/actions/workflows/test.yml)
 
-**This repository contains the public v0.1.7 source release. Use it only within the rights and limitations stated in [LICENSE](LICENSE).**
+**This repository contains the public v0.1.8 source release. Use it only within the rights and limitations stated in [LICENSE](LICENSE).**
 
 **Queue your work, let the tool handle the waiting, and resume automatically when quota returns.**
 
@@ -10,7 +10,9 @@
 
 AI Run Relay is a local AI job queue. It saves the result of every completed step, waits when it hits a usage limit, and then continues the original session. The dashboard lets you add jobs, watch countdowns, review results, cancel jobs and export logs.
 
-**v0.1.7 / installer test candidate.** Scheduling and the Codex protocol flow are covered by automated tests; the release has not yet been verified with a real subscription account. This version connects to the **official Codex app-server** and to a simulation mode that uses no quota. Providers are now pluggable (see [Architecture](docs/ARCHITECTURE.md#providers)), but Claude and Gemini adapters are not implemented yet — Codex is still the only AI provider that ships. Codex jobs are limited to read-only analysis with text results; autonomous file writes, email and publishing are not available.
+**v0.1.8 / installer test candidate.** Scheduling, the Codex protocol flow, and the Claude Code CLI flow are covered by automated tests; neither has been verified end-to-end with a real subscription account **through the packaged installer** (the Claude Code provider has been run by hand against the real CLI during development — see [Architecture](docs/ARCHITECTURE.md#providers) — but that is not the same as installer-level release testing). This version connects to the **official Codex app-server**, the **official Claude Code CLI**, and a simulation mode that uses no quota. Providers are pluggable (see [Architecture](docs/ARCHITECTURE.md#providers)); Gemini is not implemented yet. Every provider is limited to read-only analysis with text results; autonomous file writes, email and publishing are not available.
+
+**Claude Code provider — read before using.** Anthropic's Agent SDK terms state: *"Unless previously approved, Anthropic does not allow third party developers to offer claude.ai login or rate limits for their products... Use the API key authentication methods described in the Quickstart instead."* ([source](https://docs.claude.com/en/docs/agent-sdk/overview)). This provider reuses your local `claude` CLI's own subscription sign-in, the same pattern used for Codex — that is exactly the thing the clause above addresses, and this project has not sought or received approval for it. Using it is a compliance decision for the account owner to make, not something this README resolves on your behalf.
 
 ## Installers for regular users
 
@@ -56,20 +58,33 @@ Check your environment with `python3 -m relay --doctor`. A detected CLI only mea
 
 Relay only accepts ChatGPT sign-in managed by the official CLI. API-key sign-in pauses the job; **Relay never switches to separately billed API usage.** The models and quota available after sign-in are determined by your plan.
 
+## Use your own Claude Code subscription
+
+See the compliance note above before using this provider.
+
+1. Install the [Claude Code CLI](https://code.claude.com) and make sure `claude` is on your PATH.
+2. Run `claude` once in a terminal and complete sign-in with your Claude subscription. Relay provides no sign-in form and never reads `~/.claude/.credentials.json` or any other credential file.
+3. Choose the folder Relay may analyze (same `--workspace` flag as Codex, shared across providers).
+4. In the dashboard, choose **Claude Code**, enter a job name and one step per line. Results are stored in the Relay database and can be viewed or exported from the dashboard.
+
+Relay strips `ANTHROPIC_API_KEY` from the subprocess environment so a job can never fall back to separately billed API usage. Every job runs read-only: `--permission-mode dontAsk --restricted --strict-mcp-config --safe-mode` plus an explicit `--disallowedTools` list blocking Bash, Edit, Write, NotebookEdit, Task (subagents), WebFetch, and `ExitPlanMode` — verified by hand to produce zero file writes anywhere on disk, including outside the job's own workspace (an earlier `--permission-mode plan` attempt looked safer but silently wrote a plan file to `~/.claude/plans/`; see [Architecture](docs/ARCHITECTURE.md#providers)).
+
+Unlike Codex, there is no official rate-limit query for Claude Code. A usage-limit cutoff is detected by matching known phrases in the CLI's own failure text (the same technique [claude-nightshift](https://github.com/dujunyi416/claude-nightshift) uses, without reading its credential file or calling its undocumented usage endpoint), so the reset time is always reported as unknown and Relay falls back to its estimated backoff (5–60 minutes, capped at 6 attempts) rather than a platform-reported countdown.
+
 ## Behavior
 
 | Situation | Behavior |
 |---|---|
 | Normal run | Ordered by priority (10 is highest), first-in first-out within the same priority; one step runs at a time |
 | Quota exhausted with a known reset time | The time is saved durably and checked again after a small buffer; no hard-coded 5- or 12-hour waits |
-| Several usage windows exhausted | Only the codex bucket for this provider is checked; for its primary/secondary windows the latest reset wins; other buckets do not block |
-| Reset time unknown | Marked "estimated"; backoff of about 5, 10, 20, 40, 60 minutes; at most 6 automatic attempts per step |
-| Other jobs on the same platform | Share the waiting state to avoid simultaneous retries; simulation and Codex do not share quota |
+| Several usage windows exhausted (Codex) | Only the codex bucket for this provider is checked; for its primary/secondary windows the latest reset wins; other buckets do not block |
+| Reset time unknown (always true for Claude Code; Codex when the platform doesn't report one) | Marked "estimated"; backoff of about 5, 10, 20, 40, 60 minutes; at most 6 automatic attempts per step |
+| Other jobs on the same platform | Share the waiting state to avoid simultaneous retries; simulation, Codex and Claude Code each have their own, unshared quota bucket |
 | Program closed while waiting | Waiting time and completed results are saved; scheduling continues after restart |
 | Power loss or shutdown during a real run | The unconfirmed step becomes "Needs review" so you can check it before resuming, instead of blindly redoing it |
 | Computer asleep or off | Nothing runs during that time; jobs are checked again once the service is running |
 | Queue paused | No new steps start; the current step continues (cancel it if needed) |
-| Job cancelled | Sends `turn/interrupt`, waits up to 2 seconds for stop confirmation, then cleans up the process; actions already taken are not rolled back |
+| Job cancelled | Codex: sends `turn/interrupt`, waits up to 2 seconds for stop confirmation. Claude Code: there is no interrupt protocol for a one-shot `claude -p` call, so the process is terminated directly. Either way, actions already taken are not rolled back |
 | Sign-in lost, approval required, timeout | The job pauses for review; Relay never approves on your behalf |
 | A job older than 7 days | Automatic scheduling stops by default; if the platform reports a later reset, the limit extends to one hour after that reset |
 
@@ -78,13 +93,13 @@ Relay only accepts ChatGPT sign-in managed by the official CLI. API-key sign-in 
 ## Data and permissions
 
 - Default data folder: `~/.ai-run-relay/`. SQLite stores jobs, outputs, session IDs and events. Change it with `--data-dir /path`.
-- Data stays on your computer. When Codex runs, the prompt and the selected workspace data are processed by the official Codex service.
+- Data stays on your computer. When a job runs, the prompt and the selected workspace data are processed by that provider's official service (Codex or Claude Code).
 - The dashboard binds only to `127.0.0.1` and checks Host, Origin and a CSRF token. It is not a public website or a multi-user service; do not reverse-proxy it to the internet.
 - Only one Relay process may use a data folder; an operating-system lock prevents double runs.
 - A new job's working folder must be inside the current workspace. Switching workspaces does not change existing jobs. This is not a complete data-isolation sandbox.
 - Relay stores no API keys, reads no browser cookies, and never rotates accounts to get around quota.
-- Do not commit your private SQLite database, exported results, Codex configuration or sign-in files to GitHub.
-- Codex uses your existing CLI configuration. For how external MCP servers and hooks are checked and limited, see [Architecture and limits](docs/ARCHITECTURE.md).
+- Do not commit your private SQLite database, exported results, or either provider's configuration or sign-in files to GitHub.
+- Codex and Claude Code each use your existing CLI configuration. For how external MCP servers, hooks and plugins are checked and limited per provider, see [Architecture and limits](docs/ARCHITECTURE.md).
 
 ## Development and tests
 
@@ -102,9 +117,9 @@ Optional install: `python3 -m pip install .`, then run `ai-run-relay --open`.
 
 Commercial use includes enterprise operations, customer services, paid deployment, SaaS, and integration into commercial products. Contact: runiron.wu@gmail.com. This public source release is distributed under the accompanying non-commercial license; it is not MIT and is not represented as an OSI-approved open-source license.
 
-The complete source tree is intentionally published in this repository for non-commercial use. Review [CORE_PROTECTION.md](docs/CORE_PROTECTION.md) and [RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) before producing derivatives or releases. Complete your own end-to-end testing with your Codex subscription before relying on the software. This is an independent implementation and does not copy unsnooze code.
+The complete source tree is intentionally published in this repository for non-commercial use. Review [CORE_PROTECTION.md](docs/CORE_PROTECTION.md) and [RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) before producing derivatives or releases. Complete your own end-to-end testing with your own subscription(s) before relying on the software — and, for Claude Code specifically, your own read of the compliance note above. This is an independent implementation and does not copy unsnooze code.
 
-Possible next steps: official Gemini / Claude CLI providers, job dependencies, acceptance rules, desktop packaging, a background service. Cross-platform support is an architectural direction; not every AI subscription product is supported today.
+Possible next steps: an official Gemini CLI provider, job dependencies, acceptance rules, desktop packaging, a background service, resolving the Claude Code compliance question above (through prior Anthropic approval or an API-key-billed alternative). Cross-platform support is an architectural direction; not every AI subscription product is supported today.
 
 ## Changes in this release
 
@@ -114,5 +129,7 @@ See [CHANGELOG.md](CHANGELOG.md).
 
 - [Codex app-server](https://learn.chatgpt.com/docs/app-server): initialization, sign-in mode, usage windows, thread/turn protocol.
 - [Codex non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode): background on automation and session resumption.
+- [Claude Code headless mode](https://docs.claude.com/en/docs/agent-sdk/headless): `-p`/`--output-format`/`--resume` reference.
+- [Claude Agent SDK overview](https://docs.claude.com/en/docs/agent-sdk/overview): the third-party claude.ai sign-in/rate-limit restriction quoted above.
 
-Documentation last checked: 2026-10-02. The official tools may change; providers need ongoing compatibility testing.
+Documentation last checked: 2026-10-20. The official tools may change; providers need ongoing compatibility testing.

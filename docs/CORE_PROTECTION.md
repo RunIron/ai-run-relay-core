@@ -1,6 +1,6 @@
 # Public Release Notes
 
-This repository contains the public source release of AI Run Relay v0.1.7.
+This repository contains the public source release of AI Run Relay v0.1.8.
 
 ## Scope
 
