@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.9 (2026-10-20)
+
+### Fix
+
+- Dashboard: the "Settings & tools → Provider usage" panel (was "Codex usage") only ever read Codex's structured quota data and said "appears after the first Codex job reports usage" no matter which provider you ran. Running a Claude Code job left the panel looking broken rather than simply not applicable — it never has structured usage data to show (see 0.1.8's note on text-based limit detection). The panel now says so explicitly instead of staying silent.
+
 ## 0.1.8 (2026-10-20)
 
 ### Claude Code provider

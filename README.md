@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/RunIron/ai-run-relay-core/actions/workflows/test.yml/badge.svg)](https://github.com/RunIron/ai-run-relay-core/actions/workflows/test.yml)
 
-**This repository contains the public v0.1.8 source release. Use it only within the rights and limitations stated in [LICENSE](LICENSE).**
+**This repository contains the public v0.1.9 source release. Use it only within the rights and limitations stated in [LICENSE](LICENSE).**
 
 **Queue your work, let the tool handle the waiting, and resume automatically when quota returns.**
 
@@ -10,7 +10,7 @@
 
 AI Run Relay is a local AI job queue. It saves the result of every completed step, waits when it hits a usage limit, and then continues the original session. The dashboard lets you add jobs, watch countdowns, review results, cancel jobs and export logs.
 
-**v0.1.8 / installer test candidate.** Scheduling, the Codex protocol flow, and the Claude Code CLI flow are covered by automated tests; neither has been verified end-to-end with a real subscription account **through the packaged installer** (the Claude Code provider has been run by hand against the real CLI during development — see [Architecture](docs/ARCHITECTURE.md#providers) — but that is not the same as installer-level release testing). This version connects to the **official Codex app-server**, the **official Claude Code CLI**, and a simulation mode that uses no quota. Providers are pluggable (see [Architecture](docs/ARCHITECTURE.md#providers)); Gemini is not implemented yet. Every provider is limited to read-only analysis with text results; autonomous file writes, email and publishing are not available.
+**v0.1.9 / installer test candidate.** Scheduling, the Codex protocol flow, and the Claude Code CLI flow are covered by automated tests; neither has been verified end-to-end with a real subscription account **through the packaged installer** (the Claude Code provider has been run by hand against the real CLI during development — see [Architecture](docs/ARCHITECTURE.md#providers) — but that is not the same as installer-level release testing). This version connects to the **official Codex app-server**, the **official Claude Code CLI**, and a simulation mode that uses no quota. Providers are pluggable (see [Architecture](docs/ARCHITECTURE.md#providers)); Gemini is not implemented yet. Every provider is limited to read-only analysis with text results; autonomous file writes, email and publishing are not available.
 
 **Claude Code provider — read before using.** Anthropic's Agent SDK terms state: *"Unless previously approved, Anthropic does not allow third party developers to offer claude.ai login or rate limits for their products... Use the API key authentication methods described in the Quickstart instead."* ([source](https://docs.claude.com/en/docs/agent-sdk/overview)). This provider reuses your local `claude` CLI's own subscription sign-in, the same pattern used for Codex — that is exactly the thing the clause above addresses, and this project has not sought or received approval for it. Using it is a compliance decision for the account owner to make, not something this README resolves on your behalf.
 
