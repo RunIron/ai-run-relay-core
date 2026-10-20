@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.7 (2026-10-20)
+
+### Pluggable providers
+
+- `Engine` no longer hardcodes the `codex` provider name. `relay/providers.py` defines the `Provider` contract (`available()`, `run()`) that any adapter implements; `Engine(adapters={name: provider, ...})` accepts any such mapping, and job creation and `GET /api/state` validate and report providers by whatever name they were registered under.
+- `CodexAdapter` now implements `Provider` explicitly; the shared `Result` type moved to `relay/providers.py` (still importable from `relay.codex` for compatibility).
+- This is the extension point only: no new built-in provider ships in this release. Claude Code and Gemini support remain unimplemented.
+- Added `tests/test_providers.py` covering the protocol check and end-to-end pluggability (registering and rejecting provider names dynamically).
+
 ## 0.1.6 (2026-10-02)
 
 ### English only

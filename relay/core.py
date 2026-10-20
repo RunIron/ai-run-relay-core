@@ -195,8 +195,9 @@ class Engine:
             raise ValueError("Job data must be a JSON object.")
         title, steps = data.get("title", ""), data.get("steps", [])
         provider = data.get("provider", "mock")
-        if provider not in ("mock", "codex"):
-            raise ValueError("Only the simulation and Codex providers are supported.")
+        if provider != "mock" and provider not in self.adapters:
+            raise ValueError("Unknown provider '" + str(provider) + "'. Available: mock, "
+                              + ", ".join(sorted(self.adapters)) + ".")
         if not isinstance(title, str) or not title.strip() or len(title) > 200:
             raise ValueError("Job name must be 1–200 characters.")
         if not isinstance(steps, list) or not 1 <= len(steps) <= 30 or any(
@@ -265,7 +266,7 @@ class Engine:
         with self.store.lock:
             return dict(self.store.page(page, page_size, since), events=self.store.events(), now=self.clock(),
                     paused=self.store.setting("paused", False),
-                    providers={"mock": True, "codex": bool(self.adapters.get("codex") and self.adapters["codex"].available())},
+                    providers={"mock": True, **{name: bool(adapter and adapter.available()) for name, adapter in self.adapters.items()}},
                     quota=self.store.setting("quota", {}), workspace=str(self.workspace))
 
     def _session(self, job_id, session_id):
@@ -319,7 +320,7 @@ class Engine:
             self.store.save(job, f"Running step {job['step_index'] + 1} of {len(job['steps'])}.")
 
         try:
-            from .codex import Result
+            from .providers import Result
             if job["provider"] == "mock":
                 if self.active_stop.wait(0.25):
                     result = Result("cancelled")

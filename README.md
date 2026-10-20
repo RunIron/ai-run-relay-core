@@ -1,6 +1,8 @@
 # AI Run Relay
 
-**This repository contains the public v0.1.6 source release. Use it only within the rights and limitations stated in [LICENSE](LICENSE).**
+[![Tests](https://github.com/RunIron/ai-run-relay-core/actions/workflows/test.yml/badge.svg)](https://github.com/RunIron/ai-run-relay-core/actions/workflows/test.yml)
+
+**This repository contains the public v0.1.7 source release. Use it only within the rights and limitations stated in [LICENSE](LICENSE).**
 
 **Queue your work, let the tool handle the waiting, and resume automatically when quota returns.**
 
@@ -8,7 +10,7 @@
 
 AI Run Relay is a local AI job queue. It saves the result of every completed step, waits when it hits a usage limit, and then continues the original session. The dashboard lets you add jobs, watch countdowns, review results, cancel jobs and export logs.
 
-**v0.1.6 / installer test candidate.** Scheduling and the Codex protocol flow are covered by automated tests; the release has not yet been verified with a real subscription account. This version connects to the **official Codex app-server** and to a simulation mode that uses no quota. Claude and Gemini providers are not implemented yet. Codex jobs are limited to read-only analysis with text results; autonomous file writes, email and publishing are not available.
+**v0.1.7 / installer test candidate.** Scheduling and the Codex protocol flow are covered by automated tests; the release has not yet been verified with a real subscription account. This version connects to the **official Codex app-server** and to a simulation mode that uses no quota. Providers are now pluggable (see [Architecture](docs/ARCHITECTURE.md#providers)), but Claude and Gemini adapters are not implemented yet — Codex is still the only AI provider that ships. Codex jobs are limited to read-only analysis with text results; autonomous file writes, email and publishing are not available.
 
 ## Installers for regular users
 

@@ -1,7 +1,6 @@
 """Official Codex app-server stdio adapter. No credential parsing or API fallback."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import math
 import os
@@ -16,17 +15,9 @@ import time
 from typing import Callable
 
 from . import __version__
+from .providers import Provider, Result
 
-
-@dataclass
-class Result:
-    kind: str
-    output: str = ''
-    error: str = ''
-    retry_at: float | None = None
-    quota: dict | None = None
-    notices: list[str] = field(default_factory=list)
-    partial_output: str = ''
+__all__ = ['Result', 'CodexAdapter', 'quota_wait']
 
 
 def _seconds(value):
@@ -104,7 +95,7 @@ def _is_quota(error):
     return any(x in text for x in ('usagelimitexceeded', 'usage_limit_exceeded', 'ratelimitexceeded', 'rate_limit_exceeded', 'usage limit', 'rate limit'))
 
 
-class CodexAdapter:
+class CodexAdapter(Provider):
     def __init__(self, executable='codex', timeout=900, interrupt_timeout=2):
         self.executable = executable
         self.timeout = timeout

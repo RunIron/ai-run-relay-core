@@ -2,8 +2,9 @@
 
 ## Modules
 
-- `relay/core.py`: SQLite job queue, state transitions, shared platform waiting, checkpoints, process lock.
-- `relay/codex.py`: runs the official `codex app-server` as a subprocess over JSON-RPC; never calls private HTTP endpoints directly.
+- `relay/core.py`: SQLite job queue, state transitions, shared platform waiting, checkpoints, process lock. Knows nothing about any specific provider; it only calls the `Provider` contract.
+- `relay/providers.py`: the `Provider` contract (`available()`, `run()`) and the shared `Result` type every adapter returns. See "Providers" below.
+- `relay/codex.py`: runs the official `codex app-server` as a subprocess over JSON-RPC; never calls private HTTP endpoints directly. The one built-in `Provider` implementation today.
 - `relay/server.py`: local HTTP service with a random CSRF token generated on every start.
 - `relay/desktop.py`: Tk launcher window for the installed app; hosts the same local service on a free port.
 - `relay/static/index.html`: English dashboard with no CDN or front-end framework.
@@ -38,9 +39,13 @@ On Windows the subprocess and its cleanup (`taskkill`) start with `CREATE_NO_WIN
 
 The working-folder restriction is not complete confidentiality isolation; the read scope of the official sandbox is decided by Codex. Do not assign tasks that need higher privileges and expect Relay to bypass the limits.
 
+## Providers
+
+`Engine(store, workspace, adapters={name: provider, ...})` accepts any mapping of provider name to an object satisfying `relay.providers.Provider`: a callable-shaped contract of `available() -> bool` and `run(job, prompt, on_session, stop) -> Result`. `core.py` never special-cases a provider name beyond the reserved `mock` (the built-in, side-effect-free simulation); whatever names appear as keys in `adapters` become valid values for a job's `provider` field, and `GET /api/state` reports each one's current `available()` under that same name. `CodexAdapter` is registered as the default adapter and is the only one shipped today — adding a new CLI means writing one adapter class against this contract, not touching the scheduler.
+
 ## Current boundaries
 
-Only the Codex and mock providers exist. There is no cross-host scheduling, job dependency graph, cost estimate, token budget, OS background-service install, or email/mobile push. Browser notifications must be enabled manually and need the page to stay open. Execution is serial, globally and per platform; this is not a distributed queue.
+Only the Codex and mock providers ship today; Claude Code and Gemini support are not implemented (the extension point above exists, but no adapter for them has been written or tested). There is no cross-host scheduling, job dependency graph, cost estimate, token budget, OS background-service install, or email/mobile push. Browser notifications must be enabled manually and need the page to stay open. Execution is serial, globally and per platform; this is not a distributed queue.
 
 Limits: a 15-minute timeout per run, 6 automatic attempts per step, and a default 7-day waiting limit, extended to one hour after the reset when the platform explicitly reports a later reset. The database never deletes historical outputs automatically; back it up and manage its size for long-term use.
 
